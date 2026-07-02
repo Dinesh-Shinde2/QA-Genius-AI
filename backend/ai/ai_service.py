@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 async def query_llm(system_prompt: str, user_prompt: str) -> str:
     """
@@ -72,7 +72,7 @@ async def query_llm(system_prompt: str, user_prompt: str) -> str:
                     "https://api.groq.com/openai/v1/chat/completions",
                     json=payload,
                     headers=headers,
-                    timeout=20.0
+                    timeout=120.0
                 )
                 if response.status_code == 200:
                     result = response.json()

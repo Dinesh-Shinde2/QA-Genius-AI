@@ -12,6 +12,7 @@ from backend.database.db import get_db_pool, close_db_pool
 from backend.api import auth, projects, upload, generator, reports, integrations
 from backend.api import teams as teams_router
 from backend.api import bugs_enterprise as bugs_enterprise_router
+from backend.api import sprints, releases, test_executions, pipelines
 
 # Setup logging configuration
 logging.basicConfig(
@@ -169,14 +170,57 @@ async def lifespan(app: FastAPI):
             );
         """)
 
+        # Sprint Management
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS sprints (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                goal TEXT,
+                start_date TIMESTAMP WITH TIME ZONE,
+                end_date TIMESTAMP WITH TIME ZONE,
+                status VARCHAR(50) DEFAULT 'PLANNING',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Release Readiness
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS releases (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                version_name VARCHAR(100) NOT NULL,
+                target_date TIMESTAMP WITH TIME ZONE,
+                status VARCHAR(50) DEFAULT 'PENDING',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Test Executions
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS test_executions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                test_case_id UUID REFERENCES test_cases(id) ON DELETE CASCADE,
+                suite_name VARCHAR(255) DEFAULT 'Regression',
+                status VARCHAR(50) DEFAULT 'NOT_EXECUTED',
+                executed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                executed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
         # Performance indices
         await db.execute("CREATE INDEX IF NOT EXISTS idx_ebug_project ON enterprise_bugs(project_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_ebug_status ON enterprise_bugs(project_id, status);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_ebug_assigned ON enterprise_bugs(assigned_to);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_bug_history_bug ON bug_history(bug_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_bug_notif_user ON bug_notifications(user_id, is_read);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sprints_project ON sprints(project_id);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_releases_project ON releases(project_id);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_test_executions_project ON test_executions(project_id);")
 
-        logger.info("Enterprise Bug Module: All tables and indices created/verified successfully.")
+        logger.info("Enterprise Bug Module & Advanced QA Modules: All tables and indices created/verified successfully.")
 
     except Exception as e:
         logger.error(f"Failed to initialize database during startup: {e}")
@@ -210,6 +254,10 @@ app.include_router(reports.router)
 app.include_router(integrations.router)
 app.include_router(teams_router.router)
 app.include_router(bugs_enterprise_router.router)
+app.include_router(sprints.router)
+app.include_router(releases.router)
+app.include_router(test_executions.router)
+app.include_router(pipelines.router)
 
 @app.get("/")
 def read_root():
