@@ -4,16 +4,24 @@ import Sidebar from '@/components/sidebar';
 import { Briefcase, Bug, CheckSquare, Target, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import ConfirmModal from '@/components/ConfirmModal';
 
 export default function SprintManagement() {
   const { activeProject, sprints, fetchSprints, createSprint } = useAppStore();
   const [sprintName, setSprintName] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     if (activeProject) fetchSprints(activeProject.id);
   }, [activeProject, fetchSprints]);
 
-  const handleCreate = async () => {
+  const handleCreateRequest = () => {
+    if (!activeProject || !sprintName) return;
+    setShowConfirm(true);
+  };
+
+  const handleCreateConfirm = async () => {
+    setShowConfirm(false);
     if (!activeProject || !sprintName) return;
     await createSprint({
       project_id: activeProject.id,
@@ -28,7 +36,7 @@ export default function SprintManagement() {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
+      <main className="flex-1 min-w-0 p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
         
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
@@ -42,7 +50,7 @@ export default function SprintManagement() {
               placeholder="Sprint Name" 
               className="px-3 py-2 border rounded-lg text-sm bg-white text-slate-900"
             />
-            <button onClick={handleCreate} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <button onClick={handleCreateRequest} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition flex items-center gap-2">
               <Zap className="w-4 h-4" /> Create Sprint
             </button>
           </div>
@@ -82,6 +90,16 @@ export default function SprintManagement() {
         )}
 
       </main>
+
+      {showConfirm && (
+        <ConfirmModal
+          title="Create Sprint"
+          message={`Are you sure you want to create sprint '${sprintName}'?`}
+          confirmText="Create Sprint"
+          onConfirm={handleCreateConfirm}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 }

@@ -83,10 +83,10 @@ export default function CoverageMatrixPage() {
  };
 
  return (
-  <div className="flex min-min-h-screen bg-slate-50">
+  <div className="flex min-h-screen bg-slate-50">
    <Sidebar />
 
-   <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
+   <div className="flex-1 min-w-0 p-4 md:p-8 flex flex-col gap-6">
     
     {/* Header */}
     <div className="flex items-center justify-between border-b border-slate-200 pb-4">

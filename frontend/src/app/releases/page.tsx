@@ -4,16 +4,24 @@ import Sidebar from '@/components/sidebar';
 import { Layers, CheckCircle2, ShieldAlert, Calendar } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import ConfirmModal from '@/components/ConfirmModal';
 
 export default function ReleaseReadiness() {
   const { activeProject, releases, fetchReleases, createRelease } = useAppStore();
   const [releaseName, setReleaseName] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     if (activeProject) fetchReleases(activeProject.id);
   }, [activeProject, fetchReleases]);
 
-  const handleCreate = async () => {
+  const handleCreateRequest = () => {
+    if (!activeProject || !releaseName) return;
+    setShowConfirm(true);
+  };
+
+  const handleCreateConfirm = async () => {
+    setShowConfirm(false);
     if (!activeProject || !releaseName) return;
     await createRelease({
       project_id: activeProject.id,
@@ -27,7 +35,7 @@ export default function ReleaseReadiness() {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
+      <main className="flex-1 min-w-0 p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
         
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
@@ -41,7 +49,7 @@ export default function ReleaseReadiness() {
               placeholder="v1.0.0" 
               className="px-3 py-2 border rounded-lg text-sm bg-white text-slate-900"
             />
-            <button onClick={handleCreate} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-semibold transition">
+            <button onClick={handleCreateRequest} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-semibold transition">
               Create Release
             </button>
           </div>
@@ -90,6 +98,16 @@ export default function ReleaseReadiness() {
         )}
 
       </main>
+
+      {showConfirm && (
+        <ConfirmModal
+          title="Create Release"
+          message={`Are you sure you want to create release '${releaseName}'?`}
+          confirmText="Create Release"
+          onConfirm={handleCreateConfirm}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 }

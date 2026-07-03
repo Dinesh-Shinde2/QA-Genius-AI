@@ -1,8 +1,8 @@
 'use client';
 
 import Sidebar from '@/components/sidebar';
-import { PlayCircle, CheckCircle2, GitBranch, GitCommit, Play, Loader2, Server, XCircle, Github, ArrowUpCircle, FilePlus, Database } from 'lucide-react';
-import { useState } from 'react';
+import { PlayCircle, CheckCircle2, GitBranch, GitCommit, Play, Loader2, Server, XCircle, ArrowUpCircle, FilePlus, Database, History, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -12,11 +12,40 @@ export default function VersionControl() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successDetails, setSuccessDetails] = useState('');
   
+  // Commit Modal
+  const [showCommitModal, setShowCommitModal] = useState(false);
+  const [commitMessage, setCommitMessage] = useState('');
+  
+  // Git History
+  const [commitHistory, setCommitHistory] = useState<any[]>([]);
+  
   // Stages: 0=idle, 1=add, 2=commit, 3=push, 4=done
   const [activeStage, setActiveStage] = useState(0);
 
-  const pushToGithub = async () => {
+  const fetchHistory = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/pipelines/history`);
+      if (res.data && res.data.history) {
+        setCommitHistory(res.data.history);
+      }
+    } catch (e) {
+      console.error('Failed to load history', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const initiatePush = () => {
     if (pipelineState === 'running') return;
+    setCommitMessage('Update: ' + new Date().toLocaleString());
+    setShowCommitModal(true);
+  };
+
+  const executePushToGithub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowCommitModal(false);
     
     setPipelineState('running');
     setActiveStage(1); // Staging (git add)
@@ -24,16 +53,12 @@ export default function VersionControl() {
     setSuccessDetails('');
     
     try {
-      // Simulate staging time
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
       setActiveStage(2); // Committing (git commit)
-      
-      // Simulate commit time
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
       setActiveStage(3); // Pushing (git push)
       
-      // Actually push code to GitHub!
-      const res = await axios.post(`${API_BASE_URL}/api/pipelines/trigger`);
+      const res = await axios.post(`${API_BASE_URL}/api/pipelines/trigger`, { commit_message: commitMessage });
       
       setActiveStage(4); // Done
       setPipelineState('success');
@@ -41,6 +66,7 @@ export default function VersionControl() {
       if (res.data && res.data.message) {
          setSuccessDetails(res.data.message);
       }
+      fetchHistory(); // Refresh history
       
     } catch (err: any) {
       console.error(err);
@@ -52,7 +78,7 @@ export default function VersionControl() {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
+      <main className="flex-1 min-w-0 p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
         
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
@@ -62,7 +88,7 @@ export default function VersionControl() {
             <p className="text-xs text-slate-500">One-click Git sync to push your local QA Genius AI code to GitHub.</p>
           </div>
           <button 
-            onClick={pushToGithub} 
+            onClick={initiatePush} 
             disabled={pipelineState === 'running'}
             className={`px-4 py-2 text-white rounded-lg text-sm font-semibold transition flex items-center gap-2 ${pipelineState === 'running' ? 'bg-slate-800 cursor-not-allowed' : 'bg-slate-900 hover:bg-black'}`}
           >
@@ -144,7 +170,72 @@ export default function VersionControl() {
             </div>
           </div>
         </div>
+
+        {/* Real Git History */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mt-4">
+          <div className="flex items-center gap-2 mb-6">
+            <History className="w-5 h-5 text-slate-700" />
+            <h2 className="text-lg font-black text-slate-800">Recent Commits</h2>
+          </div>
+          
+          <div className="flex flex-col gap-4">
+            {commitHistory.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">No commits found yet.</p>
+            ) : (
+              commitHistory.map((commit, idx) => (
+                <div key={idx} className="flex gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition">
+                  <div className="flex-shrink-0 mt-1">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs">
+                      {commit.author.charAt(0).toUpperCase()}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{commit.message}</p>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500 font-medium">
+                      <span className="bg-slate-200/50 px-2 py-0.5 rounded text-slate-700 font-mono">{commit.hash}</span>
+                      <span>•</span>
+                      <span>{commit.author}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {commit.time_ago}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        
       </main>
+
+      {/* Commit Message Modal */}
+      {showCommitModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 shadow-xl w-full max-w-md p-6 rounded-2xl animate-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-black text-slate-900 mb-2">Push to GitHub</h2>
+            <p className="text-sm text-slate-500 mb-6">Enter a commit message describing your changes.</p>
+            
+            <form onSubmit={executePushToGithub}>
+              <textarea
+                autoFocus
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#2F81F7]/50 resize-none h-24"
+                placeholder="e.g. Added new dashboard UI..."
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                required
+              />
+              <div className="flex justify-end gap-3 mt-6">
+                <button type="button" onClick={() => setShowCommitModal(false)} className="px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+                  Cancel
+                </button>
+                <button type="submit" className="px-5 py-2 text-sm font-bold text-white bg-[#2F81F7] hover:bg-blue-600 rounded-xl transition flex items-center gap-2 shadow-sm">
+                  <ArrowUpCircle className="w-4 h-4" />
+                  Confirm & Push
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

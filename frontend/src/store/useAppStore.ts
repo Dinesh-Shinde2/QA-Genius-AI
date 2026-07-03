@@ -38,6 +38,7 @@ interface Project {
 interface TestCase {
  id: string;
  custom_id: string;
+ title?: string;
  module: string;
  feature: string;
  scenario: string;
@@ -49,6 +50,9 @@ interface TestCase {
  case_type: string;
  confidence_score: number;
  status?: string;
+ tags?: string[];
+ attachments?: string[];
+ created_at?: string;
 }
 
 interface BugReport {
@@ -145,6 +149,52 @@ interface Team {
  projects?: any[];
 }
 
+interface TestCycle {
+ id: string;
+ project_id: string;
+ name: string;
+ description?: string;
+ release_id?: string;
+ sprint_id?: string;
+ environment: string;
+ start_date?: string;
+ end_date?: string;
+ status: string;
+ created_at: string;
+ total_cases?: number;
+ passed_cases?: number;
+ failed_cases?: number;
+ skipped_cases?: number;
+}
+
+interface TestExecution {
+ id: string;
+ execution_id: string;
+ status: string;
+ executed_at?: string;
+ comments?: string;
+ execution_time_ms?: number;
+ attachment_url?: string;
+ test_case_id: string;
+ custom_id: string;
+ title: string;
+ module: string;
+ feature: string;
+ scenario: string;
+ expected_result: string;
+ priority: string;
+ executed_by_name?: string;
+}
+
+interface ExecutionComment {
+ id: string;
+ execution_id: string;
+ author_id: string;
+ content: string;
+ created_at: string;
+ author_name?: string;
+}
+
 interface AppNotification {
  id: string;
  bug_id?: string;
@@ -181,21 +231,20 @@ interface Release {
   status: string;
 }
 
-interface TestExecution {
-  id: string;
-  project_id: string;
-  test_case_id?: string;
-  suite_name: string;
-  status: string;
-  executed_by?: string;
-  executed_at?: string;
-}
+
 
 interface AppState {
  token: string | null;
  user: User | null;
  projects: Project[];
  activeProject: Project | null;
+  testCycles: TestCycle[];
+ testExecutions: TestExecution[];
+ fetchTestCycles: () => Promise<void>;
+ fetchTestExecutions: (cycleId: string) => Promise<void>;
+ createTestCycle: (data: any) => Promise<string | null>;
+ updateExecutionStatus: (execId: string, data: any) => Promise<boolean>;
+ getExecutionComments: (execId: string) => Promise<ExecutionComment[]>;
  testCases: TestCase[];
  bugs: BugReport[];
  coverageMatrix: CoverageItem[];
@@ -212,15 +261,12 @@ interface AppState {
 
   sprints: Sprint[];
   releases: Release[];
-  testExecutions: TestExecution[];
   
   fetchSprints: (projectId: string) => Promise<void>;
   createSprint: (sprint: any) => Promise<boolean>;
   fetchReleases: (projectId: string) => Promise<void>;
   createRelease: (release: any) => Promise<boolean>;
-  fetchTestExecutions: (projectId: string) => Promise<void>;
-  createTestExecution: (ex: any) => Promise<boolean>;
-
+    
  
  // Auth actions
  login: (credentials: any) => Promise<boolean>;
@@ -235,7 +281,9 @@ interface AppState {
  setActiveProject: (project: Project | null) => void;
  
  // Resource actions
- fetchTestCases: (projectId: string, module?: string) => Promise<void>;
+ fetchTestCases: (filters?: any) => Promise<void>;
+ deleteTestCase: (id: string) => Promise<boolean>;
+ bulkDeleteTestCases: (ids: string[]) => Promise<boolean>;
  fetchBugs: (projectId: string) => Promise<void>;
  fetchCoverageMatrix: (projectId: string) => Promise<void>;
  generateQAPackage: (requirementId: string, selectedTypes: string[]) => Promise<boolean>;
@@ -245,6 +293,7 @@ interface AppState {
  saveManualBug: (bugData: any) => Promise<boolean>;
  updateBug: (bugId: string, bugData: any) => Promise<boolean>;
  updateTestCase: (caseId: string, caseData: any) => Promise<boolean>;
+ createTestCase: (caseData: any) => Promise<boolean>;
  generateManualTestCasesPreview: (projectId: string, module: string, requirementText: string, selectedTypes: string[]) => Promise<any[] | null>;
  saveManualTestCases: (projectId: string, testCases: any[]) => Promise<boolean>;
  saveADOSettings: (projectId: string, orgName: string, projectName: string, patToken: string) => Promise<boolean>;
@@ -265,6 +314,7 @@ interface AppState {
  getBugHistory: (bugId: string) => Promise<any[]>;
  fetchBugDashboard: (projectId: string) => Promise<void>;
  generateAIBug: (projectId: string, description: string, module?: string) => Promise<any | null>;
+ generateAIBugFromTestCase: (data: any) => Promise<any | null>;
  setActiveBug: (bug: EnterpriseBug | null) => void;
 
  // Team actions
@@ -289,7 +339,7 @@ export const useAppStore = create<AppState>((set, get) => ({
  user: null,
  projects: [],
  activeProject: null,
- testCases: [],
+ testCycles: [], testExecutions: [], testCases: [],
  bugs: [],
  coverageMatrix: [],
  loading: false,
@@ -305,7 +355,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sprints: [],
   releases: [],
-  testExecutions: [],
 
 
  
@@ -355,27 +404,60 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) { return false; }
   },
 
-  fetchTestExecutions: async (projectId) => {
+  fetchTestCycles: async () => {
+    const projectId = get().activeProject?.id;
+    if (!projectId) return;
     const { token } = get();
     if (!token) return;
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/test-executions/${projectId}`, {
+      const res = await axios.get(`${API_BASE_URL}/api/test-executions/${projectId}/cycles`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ testCycles: res.data });
+    } catch (err) { console.error(err); }
+  },
+
+  createTestCycle: async (data: any) => {
+    const { token } = get();
+    if (!token) return null;
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/test-executions/cycle`, data, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await get().fetchTestCycles();
+      return res.data.id;
+    } catch (err) { console.error(err); return null; }
+  },
+
+  updateExecutionStatus: async (execId: string, data: any) => {
+    const { token } = get();
+    if (!token) return false;
+    try {
+      await axios.put(`${API_BASE_URL}/api/test-executions/${execId}/status`, data, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return true;
+    } catch (err) { console.error(err); return false; }
+  },
+  fetchTestExecutions: async (cycleId: string) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/test-executions/cycle/${cycleId}/executions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       set({ testExecutions: res.data });
     } catch (err) { console.error(err); }
   },
-
-  createTestExecution: async (exData) => {
+  getExecutionComments: async (execId: string) => {
     const { token } = get();
-    if (!token) return false;
+    if (!token) return [];
     try {
-      await axios.post(`${API_BASE_URL}/api/test-executions/`, exData, {
+      const res = await axios.get(`${API_BASE_URL}/api/test-executions/${execId}/comments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      await get().fetchTestExecutions(exData.project_id);
-      return true;
-    } catch (err) { return false; }
+      return res.data;
+    } catch (err) { console.error(err); return []; }
   },
 
   initializeAuth: () => {
@@ -429,7 +511,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   localStorage.removeItem('activeProject');
-  set({ token: null, user: null, activeProject: null, projects: [], testCases: [], bugs: [], coverageMatrix: [] });
+  set({ token: null, user: null, activeProject: null, projects: [], testCycles: [], testExecutions: [], testCases: [], bugs: [], coverageMatrix: [] });
  },
 
  fetchProjects: async () => {
@@ -497,7 +579,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   } else {
    localStorage.remove('activeProject');
   }
-  set({ activeProject: project, testCases: [], bugs: [], coverageMatrix: [] });
+  set({ activeProject: project, testCycles: [], testExecutions: [], testCases: [], bugs: [], coverageMatrix: [] });
   if (project) {
    get().fetchTestCases(project.id);
    get().fetchBugs(project.id);
@@ -505,27 +587,51 @@ export const useAppStore = create<AppState>((set, get) => ({
   }
  },
 
- fetchTestCases: async (projectId, module) => {
-  const { token } = get();
-  if (!token) return;
+ fetchTestCases: async (filters: any = {}) => {
+  const { token, activeProject } = get();
+  if (!token || !activeProject) return;
   try {
-   const url = `${API_BASE_URL}/api/reports/export?project_id=${projectId}&format_type=CSV`;
-   // Instead of downloading, we can fetch JSON cases. Let's make sure the direct TC fetch is called.
-   // Wait, we need to list them. Let's query SQL directly via standard FastAPI endpoints if we add them,
-   // or we can fetch them from SQL. Wait, let's write a simple helper endpoint on reports/projects to query test cases, 
-   // or we can write a quick query directly. Let's check reports.py - wait! We wrote API Design table:
-   // GET `/api/testcases` query: `projectId`, `module`
-   // Let's verify: did we add that route in the backend? Let's check reports.py or generator.py.
-   // Oh! In reports.py we have export, but we can also write a GET endpoint for direct listing of testcases and bugs!
-   // Let's add standard GET endpoints for testcases and bugs in a quick edit to generator.py or reports.py, or write a dedicated router.
-   // Wait, let's write a quick endpoint to retrieve them in JSON format instead of just CSV/Excel.
-   // Let's query the API base:
-   const res = await axios.get(`${API_BASE_URL}/api/ai/testcases?project_id=${projectId}${module ? `&module=${module}` : ''}`, {
+   let query = `?`;
+   if (filters.module) query += `module=${filters.module}&`;
+   if (filters.priority) query += `priority=${filters.priority}&`;
+   if (filters.type) query += `case_type=${filters.type}&`;
+   if (filters.status) query += `status=${filters.status}&`;
+   if (filters.search) query += `search=${filters.search}&`;
+   
+   const res = await axios.get(`${API_BASE_URL}/api/test-cases/${activeProject.id}${query}`, {
     headers: { Authorization: `Bearer ${token}` }
    });
-   set({ testCases: res.data });
-  } catch (err) {
-   console.error("Failed to fetch test cases", err);
+   set({ testCases: res.data || [] });
+  } catch (error) {
+   console.error('Failed to fetch test cases', error);
+  }
+ },
+ deleteTestCase: async (id: string) => {
+  const { token } = get();
+  if (!token) return false;
+  try {
+   await axios.delete(`${API_BASE_URL}/api/test-cases/${id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+   });
+   set(state => ({ testCases: state.testCases.filter(tc => tc.id !== id) }));
+   return true;
+  } catch (error) {
+   console.error('Failed to delete test case', error);
+   return false;
+  }
+ },
+ bulkDeleteTestCases: async (ids: string[]) => {
+  const { token } = get();
+  if (!token) return false;
+  try {
+   await axios.post(`${API_BASE_URL}/api/test-cases/bulk-delete`, { ids }, {
+    headers: { Authorization: `Bearer ${token}` }
+   });
+   set(state => ({ testCases: state.testCases.filter(tc => !ids.includes(tc.id)) }));
+   return true;
+  } catch (error) {
+   console.error('Failed to bulk delete test cases', error);
+   return false;
   }
  },
 
@@ -714,6 +820,30 @@ export const useAppStore = create<AppState>((set, get) => ({
    return false;
   }
  },
+
+  createTestCase: async (caseData) => {
+   const { token } = get();
+   if (!token) return false;
+   set({ loading: true, error: null });
+   try {
+    await axios.post(`${API_BASE_URL}/api/test-cases/`, caseData, {
+     headers: { 
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+     }
+    });
+    const activeProj = get().activeProject;
+    if (activeProj) {
+     await get().fetchTestCases(activeProj.id);
+    }
+    set({ loading: false });
+    return true;
+   } catch (err: any) {
+    const msg = err.response?.data?.detail || 'Failed to create test case';
+    set({ error: msg, loading: false });
+    return false;
+   }
+  },
 
  updateTestCase: async (caseId, caseData) => {
   const { token } = get();
@@ -1062,6 +1192,20 @@ export const useAppStore = create<AppState>((set, get) => ({
    return res.data;
   } catch (err: any) {
    console.error('AI bug generation failed', err);
+   return null;
+  }
+ },
+
+ generateAIBugFromTestCase: async (data: any) => {
+  const { token } = get();
+  if (!token) return null;
+  try {
+   const res = await axios.post(`${API_BASE_URL}/api/bugs/generate-ai-from-test-case`, data, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+   });
+   return res.data;
+  } catch (err: any) {
+   console.error('AI bug from test case failed', err);
    return null;
   }
  },

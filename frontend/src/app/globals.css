@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc; /* slate-50 */
+  --background: #F7F9FC; /* slate-50 */
   --foreground: #0f172a; /* slate-900 */
   --card: #ffffff;
   --card-border: #e2e8f0; /* slate-200 */

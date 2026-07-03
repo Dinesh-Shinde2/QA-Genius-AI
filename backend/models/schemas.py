@@ -91,23 +91,96 @@ class RequirementResponse(BaseModel):
     extracted_features: Optional[Dict[str, Any]] = None
     created_at: datetime
 
-# Test Case Schemas
-class TestCaseResponse(BaseModel):
-    id: str
-    custom_id: str
+
+# Test Case Models
+class TestCaseStatus(str, Enum):
+    DRAFT = "DRAFT"
+    REVIEW = "REVIEW"
+    APPROVED = "APPROVED"
+    DEPRECATED = "DEPRECATED"
+
+class TestCaseCreate(BaseModel):
     project_id: str
+    custom_id: Optional[str] = None
     requirement_id: Optional[str] = None
+    title: str
     module: str
     feature: str
     scenario: str
     preconditions: Optional[str] = None
-    steps: str # JSON array formatted as string
+    steps: str
+    test_data: Optional[str] = None
+    expected_result: str
+    priority: PriorityLevel = PriorityLevel.P2
+    case_type: str = "Functional"
+    status: TestCaseStatus = TestCaseStatus.DRAFT
+    tags: Optional[List[str]] = []
+    attachments: Optional[List[str]] = []
+
+class TestCaseResponse(BaseModel):
+    id: str
+    project_id: str
+    custom_id: str
+    requirement_id: Optional[str] = None
+    title: str = ""
+    module: str
+    feature: str
+    scenario: str
+    preconditions: Optional[str] = None
+    steps: str
     test_data: Optional[str] = None
     expected_result: str
     priority: PriorityLevel
     case_type: str
     confidence_score: int
+    status: str
+    tags: List[str] = []
+    attachments: List[str] = []
     created_at: datetime
+    updated_at: datetime
+
+class TestCaseVersion(BaseModel):
+    id: str
+    test_case_id: str
+    version_number: int
+    changed_by: Optional[str] = None
+    changes_made: Optional[Dict[str, Any]] = None
+    snapshot: Dict[str, Any]
+    created_at: datetime
+
+# Test Cycle Models
+class TestCycleStatus(str, Enum):
+    PLANNING = "PLANNING"
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+    ARCHIVED = "ARCHIVED"
+
+class TestCycleCreate(BaseModel):
+    project_id: str
+    name: str
+    description: Optional[str] = None
+    release_id: Optional[str] = None
+    sprint_id: Optional[str] = None
+    environment: str = "QA"
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: TestCycleStatus = TestCycleStatus.PLANNING
+    target_modules: Optional[List[str]] = None
+
+class TestCycleResponse(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    description: Optional[str] = None
+    release_id: Optional[str] = None
+    sprint_id: Optional[str] = None
+    environment: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
 
 # Bug Report Schemas (legacy)
 class BugReportResponse(BaseModel):

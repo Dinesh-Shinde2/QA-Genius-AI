@@ -73,124 +73,150 @@ export default function Sidebar() {
   }
  };
 
- const navItems = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Requirement Analysis', href: '/requirements', icon: Layers },
-  { name: 'Test Cases', href: '/testcases', icon: CheckSquare },
-  { name: 'Test Execution', href: '/test-execution', icon: CheckSquare },
-   { name: 'GitHub Sync', href: '/pipelines', icon: PlayCircle },
-  { name: 'Bug Tracker', href: '/bugs', icon: ShieldAlert },
-  { name: 'Coverage Matrix', href: '/coverage', icon: BarChart3 },
-  { name: 'Sprint Management', href: '/sprints', icon: Briefcase },
-  { name: 'Release Readiness', href: '/releases', icon: Layers },
-  { name: 'Teams', href: '/teams', icon: Users },
- ];
+  const navGroups = [
+   {
+    title: 'PROJECT',
+    items: [
+     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+     { name: 'Sprint Management', href: '/sprints', icon: Briefcase },
+     { name: 'Teams', href: '/teams', icon: Users },
+     { name: 'Requirement Analysis', href: '/requirements', icon: Layers },
+    ]
+   },
+   {
+    title: 'TESTING',
+    items: [
+     { name: 'Test Cases', href: '/testcases', icon: CheckSquare },
+     { name: 'Test Execution', href: '/test-execution', icon: CheckSquare },
+     { name: 'Bug Tracker', href: '/bugs', icon: Bug },
+    ]
+   },
+   {
+    title: 'DEVOPS & ANALYTICS',
+    items: [
+     { name: 'Release Readiness', href: '/releases', icon: Layers },
+     { name: 'Coverage Matrix', href: '/coverage', icon: BarChart3 },
+     { name: 'GitHub Sync', href: '/pipelines', icon: PlayCircle },
+    ]
+   }
+  ];
 
- return (
-  <>
-   {/* Mobile Toggle Button */}
-   <button 
-    onClick={() => setMobileMenuOpen(true)}
-    className="md:hidden fixed top-3 left-4 z-40 p-1.5 bg-white rounded-md border border-slate-200 text-slate-700 shadow-sm"
-   >
-    <Menu className="w-5 h-5" />
-   </button>
-   
-   {/* Mobile Overlay */}
-   {mobileMenuOpen && (
-    <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setMobileMenuOpen(false)} />
-   )}
+  return (
+   <>
+    {/* Mobile Toggle Button */}
+    <button 
+     onClick={() => setMobileMenuOpen(true)}
+     className="md:hidden fixed top-3 left-4 z-40 p-1.5 bg-white rounded-md border border-slate-200 text-slate-700 shadow-sm"
+    >
+     <Menu className="w-5 h-5" />
+    </button>
+    
+    {/* Mobile Overlay */}
+    {mobileMenuOpen && (
+     <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setMobileMenuOpen(false)} />
+    )}
 
-   <div className={`fixed md:sticky top-0 left-0 z-50 w-64 h-screen border-r border-slate-200 bg-white/80 backdrop-blur-xl flex flex-col justify-between p-4 shrink-0 shadow-xl shadow-black/45 transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-    <div className="flex flex-col gap-6">
-     {/* Close button for mobile */}
-     {mobileMenuOpen && (
-      <button onClick={() => setMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-500 hover:text-slate-900">
-       <X className="w-5 h-5" />
-      </button>
-     )}
-     {/* Title logo */}
-     <div className="flex items-center gap-2.5 px-2 py-1">
-      <div className="w-8 h-8 rounded-lg bg-[#2F81F7] flex items-center justify-center font-black text-slate-900 ">
-       QG
+    <div className={`fixed md:sticky top-0 left-0 z-50 w-64 h-screen border-r border-[#E2E8F0] bg-[#FFFFFF] flex flex-col p-4 shrink-0 shadow-sm transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+     
+     {/* Header: Title logo & Project Selector */}
+     <div className="flex flex-col gap-5 mb-5 flex-shrink-0">
+      {/* Close button for mobile */}
+      {mobileMenuOpen && (
+       <button onClick={() => setMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-500 hover:text-slate-900">
+        <X className="w-5 h-5" />
+       </button>
+      )}
+      {/* Title logo */}
+       <div className="flex items-center gap-2.5 px-2 py-1">
+        <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center font-black text-white ">
+         QG
+        </div>
+        <div>
+         <h1 className="font-extrabold text-slate-900 tracking-tight text-sm">QA GENIUS</h1>
+         <span className="text-[9px] text-[#64748B] font-mono tracking-widest uppercase font-semibold">Enterprise Test Mgmt</span>
+        </div>
       </div>
-      <div>
-       <h1 className="font-extrabold text-slate-900 tracking-tight text-sm">QA GENIUS</h1>
-       <span className="text-[9px] text-slate-500 font-mono tracking-widest uppercase font-semibold">Enterprise Test Mgmt</span>
-      </div>
-     </div>
 
-     {/* Project Selector Dropdown */}
-     <div className="relative">
-      <button 
-       onClick={() => setDropdownOpen(!dropdownOpen)}
-       className="w-full bg-white border border-slate-200 shadow-sm px-3 py-2.5 rounded-xl flex items-center justify-between text-left text-xs hover:border-[#2F81F7]/30 transition duration-200 shadow-md shadow-black/10 group active:scale-98"
-      >
-       <div className="flex items-center gap-2 truncate">
-        <Briefcase className="w-3.5 h-3.5 text-[#2F81F7] shrink-0 group-hover:animate-pulse" />
-        <span className="truncate text-slate-350 font-semibold group-hover:text-slate-900 transition">
-         {activeProject ? activeProject.name : 'Select Project...'}
-        </span>
-       </div>
-       <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-700 transition shrink-0" />
-      </button>
+      {/* Project Selector Dropdown */}
+      <div className="relative">
+        <button 
+         onClick={() => setDropdownOpen(!dropdownOpen)}
+         className="w-full bg-white border border-[#E2E8F0] shadow-sm px-3 py-2.5 rounded-xl flex items-center justify-between text-left text-xs hover:border-[#2563EB]/30 transition duration-200 group active:scale-98"
+        >
+         <div className="flex items-center gap-2 truncate">
+          <Briefcase className="w-3.5 h-3.5 text-[#2563EB] shrink-0 group-hover:animate-pulse" />
+          <span className="truncate text-[#64748B] font-semibold group-hover:text-slate-900 transition">
+           {activeProject ? activeProject.name : 'Select Project...'}
+          </span>
+         </div>
+         <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-700 transition shrink-0" />
+        </button>
 
-      {dropdownOpen && (
-       <div className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200/85 rounded-xl z-50 py-1 overflow-hidden shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
-        <div className="max-h-48 overflow-y-auto">
-         {projects.map((p) => (
+       {dropdownOpen && (
+        <div className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200/85 rounded-xl z-50 py-1 overflow-hidden shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
+         <div className="max-h-48 overflow-y-auto">
+          {projects.map((p) => (
+           <button
+            key={p.id}
+            onClick={() => {
+             setActiveProject(p);
+             setDropdownOpen(false);
+            }}
+             className={`w-full px-3.5 py-2.5 text-left text-xs hover:bg-[#EFF6FF] hover:text-[#2563EB] transition ${
+              activeProject?.id === p.id ? 'bg-[#EFF6FF] text-[#2563EB] font-bold border-l-2 border-[#2563EB]' : 'text-[#64748B] font-medium'
+             }`}
+           >
+            {p.name}
+           </button>
+          ))}
+         </div>
+         <div className="border-t border-slate-200/80 mt-1">
           <button
-           key={p.id}
            onClick={() => {
-            setActiveProject(p);
+            setShowNewProjectModal(true);
             setDropdownOpen(false);
            }}
-           className={`w-full px-3.5 py-2.5 text-left text-xs hover:bg-blue-950/20 hover:text-slate-900 transition ${
-            activeProject?.id === p.id ? 'bg-blue-950/40 text-blue-300 font-bold border-l-2 border-[#2F81F7]' : 'text-slate-500 font-medium'
-           }`}
+           className="w-full px-3.5 py-2.5 text-left text-xs text-slate-500 hover:bg-slate-50/15 flex items-center gap-1.5 font-bold transition duration-200"
           >
-           {p.name}
+           <Plus className="w-3.5 h-3.5" />
+           Create Project...
           </button>
-         ))}
+         </div>
         </div>
-        <div className="border-t border-slate-200/80 mt-1">
-         <button
-          onClick={() => {
-           setShowNewProjectModal(true);
-           setDropdownOpen(false);
-          }}
-          className="w-full px-3.5 py-2.5 text-left text-xs text-slate-500 hover:bg-slate-50/15 flex items-center gap-1.5 font-bold transition duration-200"
-         >
-          <Plus className="w-3.5 h-3.5" />
-          Create Project...
-         </button>
-        </div>
-       </div>
-      )}
+       )}
+      </div>
      </div>
 
-     {/* Nav Links */}
-     <nav className="flex flex-col gap-1.5">
-      {navItems.map((item) => {
-       const Icon = item.icon;
-       const isActive = pathname === item.href;
-       return (
-        <Link
-         key={item.name}
-         href={item.href}
-         className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-          isActive 
-           ? 'bg-gradient-to-r from-blue-950/30 to-slate-950/20 text-blue-300 border-l-2 border-[#2F81F7] shadow-inner' 
-           : 'text-slate-500 hover:bg-white/10 hover:text-slate-800 hover:translate-x-0.5'
-         }`}
-        >
-         <Icon className={`w-4 h-4 ${isActive ? 'text-[#2F81F7]' : 'text-slate-500'}`} />
-         {item.name}
-        </Link>
-       );
-      })}
-     </nav>
-    </div>
+     {/* Nav Links - Scrollable */}
+     <div className="flex-1 overflow-y-auto pr-1 -mr-1 flex flex-col gap-4 min-h-0 select-none [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded">
+      {navGroups.map((group) => (
+       <div key={group.title} className="flex flex-col gap-1.5">
+        <span className="px-3.5 text-[9px] font-black text-[#94A3B8] tracking-widest uppercase font-mono">
+         {group.title}
+        </span>
+        <div className="flex flex-col gap-1">
+         {group.items.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
+           <Link
+            key={item.name}
+            href={item.href}
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+             isActive 
+              ? 'bg-[#EFF6FF] text-[#2563EB] border-l-2 border-[#2563EB]' 
+              : 'text-[#64748B] hover:bg-[#F7F9FC] hover:text-[#0F172A]'
+            }`}
+           >
+            <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#64748B]'}`} />
+            <span>{item.name}</span>
+           </Link>
+          );
+         })}
+        </div>
+       </div>
+      ))}
+     </div>
 
     {/* User profile & Log Out */}
     <div className="flex flex-col gap-3 pt-4 border-t border-slate-200">
@@ -237,10 +263,10 @@ export default function Sidebar() {
       )}
      </div>
 
-     <div className="flex items-center gap-2.5 px-2 bg-slate-50/10 p-2.5 rounded-xl border border-slate-200">
-      <div className="w-8 h-8 rounded-full bg-[#2F81F7] flex items-center justify-center text-xs font-bold text-slate-900 border border-[#2F81F7]/30">
-       {user?.name ? user.name[0].toUpperCase() : 'U'}
-      </div>
+      <div className="flex items-center gap-2.5 px-2 bg-[#F7F9FC] p-2.5 rounded-xl border border-[#E2E8F0]">
+       <div className="w-8 h-8 rounded-full bg-[#2563EB] flex items-center justify-center text-xs font-bold text-white border border-[#2563EB]/30">
+        {user?.name ? user.name[0].toUpperCase() : 'U'}
+       </div>
       <div className="overflow-hidden">
        <p className="text-xs font-bold text-slate-800 truncate">{user?.name || 'QA Operator'}</p>
        <p className="text-[9px] text-slate-500 font-semibold truncate capitalize tracking-wider font-mono">{user?.role?.toLowerCase().replace('_', ' ') || 'QA Engineer'}</p>
@@ -300,11 +326,11 @@ export default function Sidebar() {
 
         <div className="flex flex-col gap-1.5">
          <label className="text-xs font-semibold text-slate-700">Domain Template Presets</label>
-         <select
-          value={newProjectTemplate}
-          onChange={(e) => setNewProjectTemplate(e.target.value)}
-          className="glass-input px-3 py-2 text-sm bg-[#120e25] text-slate-900"
-         >
+          <select
+           value={newProjectTemplate}
+           onChange={(e) => setNewProjectTemplate(e.target.value)}
+           className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm bg-white text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+          >
           <option value="CONTACT_CENTER">Contact Center (IVR & Queues)</option>
           <option value="CRM">CRM (Lead pipelines)</option>
           <option value="BANKING">Banking (Transaction safeguards)</option>
@@ -322,10 +348,10 @@ export default function Sidebar() {
          >
           Cancel
          </button>
-         <button 
-          type="submit"
-          className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#2F81F7] hover:bg-[#2F81F7] text-slate-900 "
-         >
+          <button 
+           type="submit"
+           className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white transition shadow-sm"
+          >
           Create Project
          </button>
         </div>

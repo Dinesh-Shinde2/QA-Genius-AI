@@ -204,8 +204,8 @@ async def preload_domain_template(project_id: str, domain: str):
         for tc in req["test_cases"]:
             await db.execute(
                 """
-                INSERT INTO test_cases (custom_id, project_id, requirement_id, module, feature, scenario, preconditions, steps, test_data, expected_result, priority, case_type, confidence_score)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                INSERT INTO test_cases (custom_id, project_id, requirement_id, title, module, feature, scenario, preconditions, steps, test_data, expected_result, priority, case_type, confidence_score, status, tags)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 """,
                 tc["custom_id"], project_id, req_id, req["module"], tc["feature"], tc["scenario"],
                 tc["preconditions"], tc["steps"], tc["test_data"], tc["expected_result"],

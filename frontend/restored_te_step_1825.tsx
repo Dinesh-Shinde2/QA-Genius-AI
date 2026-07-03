@@ -1,7 +1,7 @@
 'use client';
 
 import Sidebar from '@/components/sidebar';
-import { CheckCircle2, XCircle, AlertTriangle, Clock, PlayCircle, Bug, ChevronLeft, Calendar, Layout, MapPin, MessageSquare, Plus, Check, X, Sparkles, Loader2, FileEdit, ChevronDown } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Clock, PlayCircle, Bug, ChevronLeft, Calendar, Layout, MapPin, MessageSquare, Plus, Check, X, Sparkles, Loader2, FileEdit } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { useRouter } from 'next/navigation';
@@ -40,9 +40,6 @@ export default function TestExecution() {
   const [logBugMode, setLogBugMode] = useState<'choose' | 'ai-loading' | 'form'>('choose');
   const [bugForm, setBugForm] = useState<any>(null);
   const [bugFormSaving, setBugFormSaving] = useState(false);
-  const [bugSeverityOpen, setBugSeverityOpen] = useState(false);
-  const [bugPriorityOpen, setBugPriorityOpen] = useState(false);
-  const [cycleEnvOpen, setCycleEnvOpen] = useState(false);
 
   useEffect(() => {
     if (activeProject) {
@@ -173,20 +170,12 @@ export default function TestExecution() {
     onChange: (e: any) => setBugForm((f: any) => ({ ...f, [key]: e.target.value }))
   });
 
-  const inputCls = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 text-slate-800 placeholder-slate-400';
-
-  const cycleModules = Array.from(new Set((testExecutions || []).map((t: any) => t.module).filter(Boolean))).sort() as string[];
-  const executionsByModule = (testExecutions || []).reduce((acc: any, exec: any) => {
-    const mod = exec.module || 'Unassigned';
-    if (!acc[mod]) acc[mod] = [];
-    acc[mod].push(exec);
-    return acc;
-  }, {});
+  const inputCls = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2F81F7]/50 text-slate-800 placeholder-slate-400';
 
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
-      <main className="flex-1 min-w-0 p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
         
         {!activeCycle ? (
           <>
@@ -195,7 +184,7 @@ export default function TestExecution() {
                 <h1 className="text-2xl font-bold text-slate-900">Test Cycles</h1>
                 <p className="text-xs text-slate-500">Manage testing cycles, sprints, and release readiness.</p>
               </div>
-              <button onClick={() => setShowCreateModal(true)} className="px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+              <button onClick={() => setShowCreateModal(true)} className="px-4 py-2 bg-[#2F81F7] hover:bg-blue-600 text-white rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
                 <Plus className="w-4 h-4" /> New Test Cycle
               </button>
             </div>
@@ -206,7 +195,7 @@ export default function TestExecution() {
                   
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-bold text-lg text-slate-900 group-hover:text-[#2563EB] transition line-clamp-1">{cycle.name}</h3>
+                      <h3 className="font-bold text-lg text-slate-900 group-hover:text-[#2F81F7] transition line-clamp-1">{cycle.name}</h3>
                       <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{cycle.description || 'No description'}</p>
                     </div>
                     <span className={`px-2 py-1 text-[9px] font-black rounded uppercase border ${
@@ -260,121 +249,74 @@ export default function TestExecution() {
           </>
         ) : (
           <>
-            <div className="flex flex-col gap-6">
-              <button onClick={closeCycle} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 w-fit transition">
+            <div className="flex flex-col gap-4">
+              <button onClick={closeCycle} className="flex items-center gap-1 text-sm font-semibold text-slate-500 hover:text-slate-900 w-fit">
                 <ChevronLeft className="w-4 h-4" /> Back to Cycles
               </button>
               
-              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-5 gap-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                 <div>
                   <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                    <PlayCircle className="w-7 h-7 text-[#2563EB]" />
+                    <PlayCircle className="w-7 h-7 text-[#2F81F7]" />
                     {activeCycle.name}
                   </h1>
-                  <p className="text-sm text-slate-500 mt-1.5">{activeCycle.description || 'No description provided'}</p>
-                </div>
-                <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-600">
-                  <span className="flex items-center gap-1 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full"><MapPin className="w-3 h-3 text-[#2563EB]" /> {activeCycle.environment}</span>
-                  <span className="flex items-center gap-1 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full"><Calendar className="w-3 h-3 text-[#2563EB]" /> {new Date(activeCycle.created_at).toLocaleDateString()}</span>
-                  <span className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-[#2563EB] px-2.5 py-1 rounded-full">
-                    <Layout className="w-3 h-3" /> {Object.keys(executionsByModule).length} Modules Included
-                  </span>
+                  <p className="text-sm text-slate-500 mt-1">{activeCycle.description}</p>
                 </div>
               </div>
 
-              {Object.keys(executionsByModule).length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm shadow-sm">
-                  No executions found in this cycle. Add test cases to get started.
-                </div>
-              ) : (
-                <div className="flex flex-col gap-8">
-                  {Object.keys(executionsByModule).map((moduleName) => {
-                    const moduleExecs = executionsByModule[moduleName] || [];
-                    const passedCount = moduleExecs.filter((r: any) => r.status === 'PASS').length;
-                    const totalCount = moduleExecs.length;
-                    const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
-
-                    return (
-                      <div key={moduleName} className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between px-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-extrabold text-sm text-slate-800 tracking-wide uppercase">
-                              Module: {moduleName}
-                            </h3>
-                            <span className="text-xs text-slate-500 font-medium">
-                              ({totalCount} {totalCount === 1 ? 'case' : 'cases'})
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden flex shadow-inner">
-                              <div style={{ width: `${passRate}%` }} className="bg-green-500 h-full"></div>
-                            </div>
-                            <span className="text-xs font-bold text-slate-600">
-                              {passedCount}/{totalCount} Passed ({passRate}%)
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                          <table className="w-full text-left border-collapse">
-                            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                              <tr>
-                                <th className="p-4 w-28">TC ID</th>
-                                <th className="p-4 w-1/3">Title / Scenario</th>
-                                <th className="p-4">Priority</th>
-                                <th className="p-4">Status</th>
-                                <th className="p-4">Tester</th>
-                                <th className="p-4 text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-sm">
-                              {moduleExecs.map((exec: any) => (
-                                <tr key={exec.execution_id} className="hover:bg-slate-50/50 transition cursor-pointer" onClick={() => openExecution(exec)}>
-                                  <td className="p-4 font-mono font-bold text-xs text-slate-600">{exec.custom_id}</td>
-                                  <td className="p-4">
-                                    <div className="font-semibold text-slate-800 line-clamp-1">{exec.title || exec.scenario}</div>
-                                    {exec.feature && (
-                                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{exec.feature}</div>
-                                    )}
-                                  </td>
-                                  <td className="p-4">
-                                    <span className={`px-2 py-0.5 rounded border text-[9px] font-black uppercase ${
-                                      exec.priority === 'P1' || exec.priority === 'CRITICAL' ? 'bg-rose-50 text-rose-600 border-rose-200' : 
-                                      exec.priority === 'P2' || exec.priority === 'HIGH' ? 'bg-orange-50 text-orange-600 border-orange-200' : 
-                                      'bg-slate-50 text-slate-600 border-slate-200'
-                                    }`}>
-                                      {exec.priority}
-                                    </span>
-                                  </td>
-                                  <td className="p-4">
-                                     <span className={`px-2.5 py-1 rounded-full text-[9px] border font-bold uppercase tracking-wider flex w-fit items-center gap-1 ${
-                                       exec.status === 'PASS' ? 'bg-green-50 text-green-700 border-green-200' : 
-                                       exec.status === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : 
-                                       exec.status === 'SKIP' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
-                                       exec.status === 'BLOCKED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 
-                                       'bg-slate-100 text-slate-600 border-slate-200'
-                                     }`}>
-                                       {exec.status === 'NOT_EXECUTED' ? 'Not Run' : exec.status}
-                                     </span>
-                                  </td>
-                                  <td className="p-4 text-xs font-semibold text-slate-500">
-                                    {exec.executed_by_name || '-'}
-                                  </td>
-                                  <td className="p-4 text-right">
-                                    <button className="px-3 py-1.5 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded transition shadow-sm">
-                                      Execute
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-50/80 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    <tr>
+                      <th className="p-4">TC ID</th>
+                      <th className="p-4 w-1/3">Title / Scenario</th>
+                      <th className="p-4">Priority</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Tester</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {(testExecutions || []).map((exec: any) => (
+                      <tr key={exec.execution_id} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => openExecution(exec)}>
+                        <td className="p-4 font-mono font-bold text-xs text-slate-600">{exec.custom_id}</td>
+                        <td className="p-4">
+                          <div className="font-semibold text-slate-800 line-clamp-1">{exec.title || exec.scenario}</div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-1">{exec.module} / {exec.feature}</div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-0.5 rounded border text-[9px] font-black uppercase ${
+                            exec.priority === 'P1' || exec.priority === 'CRITICAL' ? 'bg-rose-50 text-rose-600 border-rose-200' : 
+                            exec.priority === 'P2' || exec.priority === 'HIGH' ? 'bg-orange-50 text-orange-600 border-orange-200' : 
+                            'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}>
+                            {exec.priority}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                           <span className={`px-2.5 py-1 rounded-full text-[9px] border font-bold uppercase tracking-wider flex w-fit items-center gap-1 ${
+                             exec.status === 'PASS' ? 'bg-green-50 text-green-700 border-green-200' : 
+                             exec.status === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : 
+                             exec.status === 'SKIP' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
+                             exec.status === 'BLOCKED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 
+                             'bg-slate-100 text-slate-600 border-slate-200'
+                           }`}>
+                             {exec.status === 'NOT_EXECUTED' ? 'Not Run' : exec.status}
+                           </span>
+                        </td>
+                        <td className="p-4 text-xs font-semibold text-slate-500">
+                          {exec.executed_by_name || '-'}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button className="px-3 py-1.5 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded transition">
+                            Execute
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
@@ -391,44 +333,25 @@ export default function TestExecution() {
             <div className="p-6 flex flex-col gap-4">
               <div>
                 <label className="text-xs font-bold text-slate-700 mb-1 block">Cycle Name *</label>
-                <input required value={cycleName} onChange={e => setCycleName(e.target.value)} placeholder="e.g. Sprint 12 Regression" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50" />
+                <input required value={cycleName} onChange={e => setCycleName(e.target.value)} placeholder="e.g. Sprint 12 Regression" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2F81F7]/50" />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-700 mb-1 block">Description</label>
-                <textarea value={cycleDesc} onChange={e => setCycleDesc(e.target.value)} placeholder="Testing goals..." className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 resize-none h-16" />
+                <textarea value={cycleDesc} onChange={e => setCycleDesc(e.target.value)} placeholder="Testing goals..." className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2F81F7]/50 resize-none h-16" />
               </div>
-              <div className="relative">
+              <div>
                 <label className="text-xs font-bold text-slate-700 mb-1 block">Environment</label>
-                <button
-                  type="button"
-                  onClick={() => setCycleEnvOpen(!cycleEnvOpen)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 flex items-center justify-between text-slate-800 font-semibold hover:bg-slate-100/50 transition"
-                >
-                  <span>{cycleEnv}</span>
-                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                </button>
-                {cycleEnvOpen && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold text-slate-700">
-                    {['QA', 'STAGING', 'UAT', 'PROD'].map(env => (
-                      <button
-                        type="button"
-                        key={env}
-                        onClick={() => {
-                          setCycleEnv(env);
-                          setCycleEnvOpen(false);
-                        }}
-                        className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition ${cycleEnv === env ? 'bg-blue-50/50 text-[#2563EB]' : ''}`}
-                      >
-                        {env}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <select value={cycleEnv} onChange={e => setCycleEnv(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2F81F7]/50">
+                  <option>QA</option>
+                  <option>STAGING</option>
+                  <option>UAT</option>
+                  <option>PROD</option>
+                </select>
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Target Modules</label>
-                  <button type="button" onClick={handleSelectAllModules} className="text-[10px] font-bold text-[#2563EB] hover:text-blue-700 transition">
+                  <button type="button" onClick={handleSelectAllModules} className="text-[10px] font-bold text-[#2F81F7] hover:text-blue-700 transition">
                     {allModulesSelected ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>
@@ -441,7 +364,7 @@ export default function TestExecution() {
                       return (
                         <label key={mod} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer text-sm transition select-none ${isChecked ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
                           <div
-                            className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${isChecked ? 'bg-[#2563EB] border-[#2563EB]' : 'border-slate-300 bg-white'}`}
+                            className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${isChecked ? 'bg-[#2F81F7] border-[#2F81F7]' : 'border-slate-300 bg-white'}`}
                             onClick={() => toggleModule(mod)}
                           >
                             {isChecked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
@@ -459,7 +382,7 @@ export default function TestExecution() {
             </div>
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
               <button type="button" onClick={handleCloseCreateModal} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-bold bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg transition shadow-sm">Create Cycle</button>
+              <button type="submit" className="px-4 py-2 text-xs font-bold bg-[#2F81F7] hover:bg-blue-600 text-white rounded-lg transition shadow-sm">Create Cycle</button>
             </div>
           </form>
         </div>
@@ -471,7 +394,7 @@ export default function TestExecution() {
           <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
             <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
               <div className="flex items-center gap-3">
-                <span className="font-mono font-bold text-[#2563EB] text-sm">{activeExec.custom_id}</span>
+                <span className="font-mono font-bold text-[#2F81F7] text-sm">{activeExec.custom_id}</span>
                 <span className={`px-2.5 py-1 rounded-full text-[9px] border font-black uppercase tracking-wider flex w-fit items-center gap-1 ${
                   activeExec.status === 'PASS' ? 'bg-green-50 text-green-700 border-green-200' : 
                   activeExec.status === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : 
@@ -556,7 +479,7 @@ export default function TestExecution() {
                     onChange={e => setNewComment(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleAddComment()}
                     placeholder="Add a comment or actual result..."
-                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50"
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2F81F7]/50"
                   />
                   <button onClick={handleAddComment} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-lg transition">Post</button>
                 </div>
@@ -599,7 +522,7 @@ export default function TestExecution() {
                 <div className="grid grid-cols-2 gap-4 w-full max-w-md">
                   <button
                     onClick={handleGenerateAIBug}
-                    className="flex flex-col items-center gap-3 p-6 bg-gradient-to-br from-[#2563EB] to-blue-600 text-white rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
+                    className="flex flex-col items-center gap-3 p-6 bg-gradient-to-br from-[#2F81F7] to-blue-600 text-white rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
                   >
                     <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:bg-white/30 transition">
                       <Sparkles className="w-6 h-6" />
@@ -629,7 +552,7 @@ export default function TestExecution() {
             {logBugMode === 'ai-loading' && (
               <div className="p-12 flex flex-col items-center gap-4">
                 <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center">
-                  <Loader2 className="w-7 h-7 text-[#2563EB] animate-spin" />
+                  <Loader2 className="w-7 h-7 text-[#2F81F7] animate-spin" />
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-slate-900">AI is analyzing the test failure...</p>
@@ -663,72 +586,23 @@ export default function TestExecution() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
+                    <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Severity</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBugSeverityOpen(!bugSeverityOpen);
-                          setBugPriorityOpen(false);
-                        }}
-                        className={`${inputCls} flex items-center justify-between`}
-                      >
-                        <span>{bugForm.severity || 'HIGH'}</span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                      </button>
-                      {bugSeverityOpen && (
-                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold text-slate-700">
-                          {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => (
-                            <button
-                              type="button"
-                              key={s}
-                              onClick={() => {
-                                setBugForm({ ...bugForm, severity: s });
-                                setBugSeverityOpen(false);
-                              }}
-                              className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition ${bugForm.severity === s ? 'bg-blue-50/55 text-[#2563EB]' : ''}`}
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <select {...BF('severity')} className={inputCls}>
+                        <option value="CRITICAL">CRITICAL</option>
+                        <option value="HIGH">HIGH</option>
+                        <option value="MEDIUM">MEDIUM</option>
+                        <option value="LOW">LOW</option>
+                      </select>
                     </div>
-                    <div className="relative">
+                    <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Priority</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBugPriorityOpen(!bugPriorityOpen);
-                          setBugSeverityOpen(false);
-                        }}
-                        className={`${inputCls} flex items-center justify-between`}
-                      >
-                        <span>{bugForm.priority === 'P1' ? 'P1 — Critical' : bugForm.priority === 'P2' ? 'P2 — High' : bugForm.priority === 'P3' ? 'P3 — Medium' : bugForm.priority === 'P4' ? 'P4 — Low' : bugForm.priority || 'P2'}</span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                      </button>
-                      {bugPriorityOpen && (
-                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold text-slate-700">
-                          {[
-                            { value: 'P1', label: 'P1 — Critical' },
-                            { value: 'P2', label: 'P2 — High' },
-                            { value: 'P3', label: 'P3 — Medium' },
-                            { value: 'P4', label: 'P4 — Low' }
-                          ].map(p => (
-                            <button
-                              type="button"
-                              key={p.value}
-                              onClick={() => {
-                                setBugForm({ ...bugForm, priority: p.value });
-                                setBugPriorityOpen(false);
-                              }}
-                              className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition ${bugForm.priority === p.value ? 'bg-blue-50/55 text-[#2563EB]' : ''}`}
-                            >
-                              {p.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <select {...BF('priority')} className={inputCls}>
+                        <option value="P1">P1 — Critical</option>
+                        <option value="P2">P2 — High</option>
+                        <option value="P3">P3 — Medium</option>
+                        <option value="P4">P4 — Low</option>
+                      </select>
                     </div>
                   </div>
                   <div>

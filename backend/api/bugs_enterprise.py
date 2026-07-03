@@ -1,8 +1,10 @@
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
+from pydantic import BaseModel
 
 from backend.database import db
 from backend.api.auth import get_current_user
@@ -675,6 +677,111 @@ Generate a complete enterprise bug report for this issue."""
         raise HTTPException(status_code=500, detail="AI returned invalid JSON. Please try again.")
     except Exception as e:
         logger.error(f"AI bug generate error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+# ─── AI GENERATE BUG FROM TEST CASE ─────────────────────────────────────────
+
+class AIBugFromTestCase(BaseModel):
+    project_id: str
+    test_case_id: Optional[str] = None
+    execution_id: Optional[str] = None
+    # Test case context
+    title: Optional[str] = None
+    module: Optional[str] = None
+    feature: Optional[str] = None
+    scenario: Optional[str] = None
+    expected_result: Optional[str] = None
+    actual_result: Optional[str] = None   # actual result / execution comment
+    priority: Optional[str] = None
+    steps: Optional[str] = None
+    preconditions: Optional[str] = None
+
+@router.post("/generate-ai-from-test-case", response_model=dict)
+async def generate_ai_bug_from_test_case(request: AIBugFromTestCase, current_user: dict = Depends(get_current_user)):
+    """Generate a structured bug report from a failed test case context."""
+    project = await db.fetchrow(
+        "SELECT id, name FROM projects WHERE id = $1",
+        uuid.UUID(request.project_id)
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    system_prompt = """You are a senior QA engineer writing a formal bug report for a failed test case.
+Given the test case details and context, generate a precise, actionable bug report in strict JSON format.
+
+Return ONLY a valid JSON object with these exact keys:
+{
+  "title": "Concise bug title describing what failed (max 100 chars)",
+  "module": "Module name from the test case",
+  "feature": "Feature name from the test case",
+  "description": "Detailed description of what failed and why it is a bug",
+  "preconditions": "Pre-conditions from the test case or context",
+  "steps_to_reproduce": "1. Step 1\\n2. Step 2\\n3. Step 3 (derived from test scenario)",
+  "expected_result": "The expected result from the test case",
+  "actual_result": "What actually happened (failure description)",
+  "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+  "priority": "P1|P2|P3|P4",
+  "environment": "QA",
+  "root_cause_suggestion": "Likely technical root cause",
+  "impact_analysis": "User and business impact of this failure",
+  "severity_reason": "Why this severity was chosen based on test priority and failure",
+  "tags": ["regression", "test-failure"]
+}
+
+Be specific, reference the test case scenario and expected result."""
+
+    user_prompt = f"""Project: {project['name']}
+
+FAILED TEST CASE:
+- Title/Scenario: {request.title or request.scenario or 'N/A'}
+- Module: {request.module or 'N/A'}
+- Feature: {request.feature or 'N/A'}
+- Priority: {request.priority or 'N/A'}
+- Preconditions: {request.preconditions or 'N/A'}
+- Test Steps: {request.steps or 'N/A'}
+- Expected Result: {request.expected_result or 'N/A'}
+- Actual Result / Failure Notes: {request.actual_result or 'Test case failed without additional notes'}
+
+Generate a complete, professional bug report for this test failure."""
+
+    try:
+        raw = await query_llm(system_prompt, user_prompt)
+        raw = raw.strip()
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0].strip()
+
+        bug_data = json.loads(raw)
+
+        valid_severities = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+        valid_priorities = {"P1", "P2", "P3", "P4"}
+
+        return {
+            "title": str(bug_data.get("title", f"Test Failure: {request.title or request.scenario or 'Unknown'}"))[:200],
+            "module": str(bug_data.get("module", request.module or "General")),
+            "feature": str(bug_data.get("feature", request.feature or "General")),
+            "description": str(bug_data.get("description", "")),
+            "preconditions": str(bug_data.get("preconditions", request.preconditions or "")),
+            "steps_to_reproduce": str(bug_data.get("steps_to_reproduce", "")),
+            "expected_result": str(bug_data.get("expected_result", request.expected_result or "")),
+            "actual_result": str(bug_data.get("actual_result", request.actual_result or "")),
+            "severity": bug_data.get("severity", "HIGH") if bug_data.get("severity") in valid_severities else "HIGH",
+            "priority": bug_data.get("priority", "P2") if bug_data.get("priority") in valid_priorities else "P2",
+            "environment": str(bug_data.get("environment", "QA")),
+            "root_cause_suggestion": str(bug_data.get("root_cause_suggestion", "")),
+            "impact_analysis": str(bug_data.get("impact_analysis", "")),
+            "severity_reason": str(bug_data.get("severity_reason", "")),
+            "tags": bug_data.get("tags", ["test-failure"]) if isinstance(bug_data.get("tags"), list) else ["test-failure"],
+            "project_id": request.project_id,
+            "linked_test_case_id": request.test_case_id,
+        }
+    except json.JSONDecodeError as e:
+        logger.error(f"AI bug from test case: JSON parse failed: {e}")
+        raise HTTPException(status_code=500, detail="AI returned invalid JSON. Please try again.")
+    except Exception as e:
+        logger.error(f"AI bug from test case error: {e}")
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 

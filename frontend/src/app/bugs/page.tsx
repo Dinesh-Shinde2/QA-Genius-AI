@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppStore } from '@/store/useAppStore';
 import Sidebar from '@/components/sidebar';
 import Copilot from '@/components/copilot';
@@ -185,12 +185,16 @@ const EMPTY_FORM = {
  root_cause_suggestion: '', fix_details: '', impact_analysis: '', severity_reason: '',
  tags: [] as string[],
  assigned_to: '',
+ linked_test_case_id: '',
 };
 
 type ViewMode = 'kanban' | 'list' | 'dashboard';
 
-export default function BugsPage() {
+import { Suspense } from 'react';
+
+function BugsPageContent() {
  const router = useRouter();
+ const searchParams = useSearchParams();
  const {
   token, activeProject, user,
   enterpriseBugs, fetchEnterpriseBugs, createEnterpriseBug, updateEnterpriseBug,
@@ -239,11 +243,34 @@ export default function BugsPage() {
  // Delete confirm
  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+ // Custom Dropdowns
+ const [filterStatusOpen, setFilterStatusOpen] = useState(false);
+ const [filterSeverityOpen, setFilterSeverityOpen] = useState(false);
+ const [filterPriorityOpen, setFilterPriorityOpen] = useState(false);
+ const [formSeverityOpen, setFormSeverityOpen] = useState(false);
+ const [formPriorityOpen, setFormPriorityOpen] = useState(false);
+
+ const handleSelectFormSeverity = (val: string) => {
+   setForm(f => ({ ...f, severity: val }));
+   setFormSeverityOpen(false);
+ };
+ const handleSelectFormPriority = (val: string) => {
+   setForm(f => ({ ...f, priority: val }));
+   setFormPriorityOpen(false);
+ };
+
  const commentsEndRef = useRef<HTMLDivElement>(null);
 
  // ── Load data ──────────────────────────────────────────────────────────────
  useEffect(() => {
   if (!token) { router.push('/'); return; }
+  
+  // Handle testCaseId from URL
+  const tcId = searchParams.get('testCaseId');
+  if (tcId && !showCreateModal) {
+    setForm({ ...EMPTY_FORM, linked_test_case_id: tcId });
+    setShowCreateModal(true);
+  }
   if (activeProject) {
    fetchEnterpriseBugs(activeProject.id, {
     status: filterStatus || undefined,
@@ -285,6 +312,7 @@ export default function BugsPage() {
     severity_reason: activeBug.severity_reason || '',
     tags: activeBug.tags || [],
     assigned_to: activeBug.assigned_to || '',
+    linked_test_case_id: (activeBug as any).linked_test_case_id || '',
    });
   }
  }, [activeBug, drawerOpen]);
@@ -402,17 +430,61 @@ export default function BugsPage() {
      <label className={labelCls}>Feature</label>
      <input {...F('feature')} placeholder="e.g. Login Form" className={inputCls} />
     </div>
-    <div>
+    <div className="relative">
      <label className={labelCls}>Severity</label>
-     <select {...F('severity')} className={`${inputCls} bg-white`}>
-      {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => <option key={s}>{s}</option>)}
-     </select>
+     <button
+       type="button"
+       onClick={() => {
+         setFormSeverityOpen(!formSeverityOpen);
+         setFormPriorityOpen(false);
+       }}
+       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-left flex items-center justify-between focus:outline-none focus:border-[#2F81F7] focus:ring-4 focus:ring-blue-100 text-slate-800 font-bold transition-all duration-200 shadow-sm"
+     >
+       <span>{form.severity}</span>
+       <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+     </button>
+     {formSeverityOpen && (
+       <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-1 duration-100 max-h-48 overflow-y-auto font-bold">
+         {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => (
+           <button
+             type="button"
+             key={s}
+             onClick={() => handleSelectFormSeverity(s)}
+             className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition text-slate-700 font-bold ${form.severity === s ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+           >
+             {s}
+           </button>
+         ))}
+       </div>
+     )}
     </div>
-    <div>
+    <div className="relative">
      <label className={labelCls}>Priority</label>
-     <select {...F('priority')} className={`${inputCls} bg-white`}>
-      {['P1', 'P2', 'P3', 'P4'].map(p => <option key={p}>{p}</option>)}
-     </select>
+     <button
+       type="button"
+       onClick={() => {
+         setFormPriorityOpen(!formPriorityOpen);
+         setFormSeverityOpen(false);
+       }}
+       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-left flex items-center justify-between focus:outline-none focus:border-[#2F81F7] focus:ring-4 focus:ring-blue-100 text-slate-800 font-bold transition-all duration-200 shadow-sm"
+     >
+       <span>{form.priority}</span>
+       <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+     </button>
+     {formPriorityOpen && (
+       <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-1 duration-100 max-h-48 overflow-y-auto font-bold">
+         {['P1', 'P2', 'P3', 'P4'].map(p => (
+           <button
+             type="button"
+             key={p}
+             onClick={() => handleSelectFormPriority(p)}
+             className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition text-slate-700 font-bold ${form.priority === p ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+           >
+             {p}
+           </button>
+         ))}
+       </div>
+     )}
     </div>
     <div>
      <label className={labelCls}>Environment</label>
@@ -626,18 +698,116 @@ export default function BugsPage() {
      </div>
 
      {/* Filters */}
-     <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-white/60 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-[#2F81F7]/60">
-      <option value="">All Status</option>
-      {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_CONFIG[s]?.label || s}</option>)}
-     </select>
-     <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} className="bg-white/60 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-[#2F81F7]/60">
-      <option value="">All Severity</option>
-      {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => <option key={s} value={s}>{s}</option>)}
-     </select>
-     <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="bg-white/60 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-[#2F81F7]/60">
-      <option value="">All Priority</option>
-      {['P1', 'P2', 'P3', 'P4'].map(p => <option key={p} value={p}>{p}</option>)}
-     </select>
+     {/* Status Filter */}
+     <div className="relative">
+      <button
+       type="button"
+       onClick={() => {
+         setFilterStatusOpen(!filterStatusOpen);
+         setFilterSeverityOpen(false);
+         setFilterPriorityOpen(false);
+       }}
+       className="bg-white/60 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none flex items-center gap-1.5 min-w-[110px] justify-between font-semibold hover:bg-slate-50 transition shadow-sm"
+      >
+       <span>{filterStatus === '' ? 'All Status' : STATUS_CONFIG[filterStatus]?.label || filterStatus}</span>
+       <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      </button>
+      {filterStatusOpen && (
+       <div className="absolute left-0 mt-1 min-w-[150px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-60 overflow-y-auto font-semibold">
+         <button
+           type="button"
+           onClick={() => { setFilterStatus(''); setFilterStatusOpen(false); }}
+           className={`w-full px-3.5 py-1.5 text-left text-xs hover:bg-slate-50 transition text-slate-700 ${filterStatus === '' ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+         >
+           All Status
+         </button>
+         {ALL_STATUSES.map(s => (
+           <button
+             type="button"
+             key={s}
+             onClick={() => { setFilterStatus(s); setFilterStatusOpen(false); }}
+             className={`w-full px-3.5 py-1.5 text-left text-xs hover:bg-slate-50 transition text-slate-700 ${filterStatus === s ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+           >
+             {STATUS_CONFIG[s]?.label || s}
+           </button>
+         ))}
+       </div>
+      )}
+     </div>
+
+     {/* Severity Filter */}
+     <div className="relative">
+      <button
+       type="button"
+       onClick={() => {
+         setFilterSeverityOpen(!filterSeverityOpen);
+         setFilterStatusOpen(false);
+         setFilterPriorityOpen(false);
+       }}
+       className="bg-white/60 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none flex items-center gap-1.5 min-w-[110px] justify-between font-semibold hover:bg-slate-50 transition shadow-sm"
+      >
+       <span>{filterSeverity === '' ? 'All Severity' : filterSeverity}</span>
+       <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      </button>
+      {filterSeverityOpen && (
+       <div className="absolute left-0 mt-1 min-w-[130px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold">
+         <button
+           type="button"
+           onClick={() => { setFilterSeverity(''); setFilterSeverityOpen(false); }}
+           className={`w-full px-3.5 py-1.5 text-left text-xs hover:bg-slate-50 transition text-slate-700 ${filterSeverity === '' ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+         >
+           All Severity
+         </button>
+         {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => (
+           <button
+             type="button"
+             key={s}
+             onClick={() => { setFilterSeverity(s); setFilterSeverityOpen(false); }}
+             className={`w-full px-3.5 py-1.5 text-left text-xs hover:bg-slate-50 transition text-slate-700 ${filterSeverity === s ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+           >
+             {s}
+           </button>
+         ))}
+       </div>
+      )}
+     </div>
+
+     {/* Priority Filter */}
+     <div className="relative">
+      <button
+       type="button"
+       onClick={() => {
+         setFilterPriorityOpen(!filterPriorityOpen);
+         setFilterStatusOpen(false);
+         setFilterSeverityOpen(false);
+       }}
+       className="bg-white/60 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none flex items-center gap-1.5 min-w-[110px] justify-between font-semibold hover:bg-slate-50 transition shadow-sm"
+      >
+       <span>{filterPriority === '' ? 'All Priority' : filterPriority}</span>
+       <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      </button>
+      {filterPriorityOpen && (
+       <div className="absolute left-0 mt-1 min-w-[130px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold">
+         <button
+           type="button"
+           onClick={() => { setFilterPriority(''); setFilterPriorityOpen(false); }}
+           className={`w-full px-3.5 py-1.5 text-left text-xs hover:bg-slate-50 transition text-slate-700 ${filterPriority === '' ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+         >
+           All Priority
+         </button>
+         {['P1', 'P2', 'P3', 'P4'].map(p => (
+           <button
+             type="button"
+             key={p}
+             onClick={() => { setFilterPriority(p); setFilterPriorityOpen(false); }}
+             className={`w-full px-3.5 py-1.5 text-left text-xs hover:bg-slate-50 transition text-slate-700 ${filterPriority === p ? 'bg-blue-50/50 text-[#2F81F7]' : ''}`}
+           >
+             {p}
+           </button>
+         ))}
+       </div>
+      )}
+     </div>
 
      {(filterStatus || filterSeverity || filterPriority || filterSearch) && (
       <button onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterPriority(''); setFilterSearch(''); }} className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 transition">
@@ -1132,4 +1302,12 @@ export default function BugsPage() {
    <Copilot />
   </div>
  );
+}
+
+export default function BugsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading Bug Tracker...</div>}>
+      <BugsPageContent />
+    </Suspense>
+  );
 }
