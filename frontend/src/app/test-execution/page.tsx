@@ -1,374 +1,314 @@
 'use client';
 
-import Sidebar from '@/components/sidebar';
-import { CheckCircle2, XCircle, AlertTriangle, Clock, PlayCircle, Bug, ChevronLeft, Calendar, Layout, MapPin, MessageSquare, Plus, Check, X, Sparkles, Loader2, FileEdit, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useAppStore } from '@/store/useAppStore';
 import { useRouter } from 'next/navigation';
+import Sidebar from '@/components/sidebar';
+import Copilot from '@/components/copilot';
+import { useAppStore } from '@/store/useAppStore';
+import {
+  PlayCircle, CheckCircle, XCircle, AlertTriangle, ChevronLeft,
+  Plus, X, Check, ArrowRight, Bug, Clock, User, Layers,
+  ExternalLink, Loader2, ClipboardList, Info
+} from 'lucide-react';
 
-export default function TestExecution() {
+const SEVERITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const PRIORITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH'];
+
+export default function TestExecutionPage() {
   const router = useRouter();
-  const { activeProject, testCycles, testExecutions, fetchTestCycles, fetchTestExecutions, createTestCycle, updateExecutionStatus, getExecutionComments, testCases, fetchTestCases, generateAIBugFromTestCase, createEnterpriseBug } = useAppStore();
-  
-  // ── Create Cycle State ──────────────────────────────────────────────────────
+  const {
+    token, activeProject, projects, setActiveProject,
+    testRuns, fetchTestRuns, startTestRun, activeTestRun,
+    fetchTestRunDetails, logTestCaseResult, completeTestRun,
+    createEnterpriseBug
+  } = useAppStore();
+
+  // Navigation / UI View States
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [cycleName, setCycleName] = useState('');
-  const [cycleDesc, setCycleDesc] = useState('');
-  const [cycleEnv, setCycleEnv] = useState('QA');
-  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [newRunName, setNewRunName] = useState('');
   
-  const uniqueModules = Array.from(new Set((testCases || []).map((t: any) => t.module).filter(Boolean))) as string[];
-  const allModulesSelected = selectedModules.length === uniqueModules.length && uniqueModules.length > 0;
+  // Bug creation state (Auto-Bug Flow)
+  const [showBugModal, setShowBugModal] = useState(false);
+  const [bugTitle, setBugTitle] = useState('');
+  const [bugSeverity, setBugSeverity] = useState('HIGH');
+  const [bugPriority, setBugPriority] = useState('HIGH');
+  const [bugEnvironment, setBugEnvironment] = useState('QA');
+  const [bugBuildVersion, setBugBuildVersion] = useState('1.0.0');
 
-  const toggleModule = (mod: string) => {
-    setSelectedModules(prev => prev.includes(mod) ? prev.filter(m => m !== mod) : [...prev, mod]);
-  };
+  // Runner input states
+  const [actualResult, setActualResult] = useState('');
+  const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({});
+  const [loading, setLoading] = useState(false);
+  const [submittingResult, setSubmittingResult] = useState(false);
 
-  const handleSelectAllModules = () => {
-    setSelectedModules(allModulesSelected ? [] : [...uniqueModules]);
-  };
-
-  const [activeCycle, setActiveCycle] = useState<any | null>(null);
-
-  // ── Execution State ─────────────────────────────────────────────────────────
-  const [activeExec, setActiveExec] = useState<any | null>(null);
-  const [execComments, setExecComments] = useState<any[]>([]);
-  const [newComment, setNewComment] = useState('');
-
-  // ── Log Bug State ───────────────────────────────────────────────────────────
-  const [showLogBugModal, setShowLogBugModal] = useState(false);
-  const [logBugMode, setLogBugMode] = useState<'choose' | 'ai-loading' | 'form'>('choose');
-  const [bugForm, setBugForm] = useState<any>(null);
-  const [bugFormSaving, setBugFormSaving] = useState(false);
-  const [bugSeverityOpen, setBugSeverityOpen] = useState(false);
-  const [bugPriorityOpen, setBugPriorityOpen] = useState(false);
-  const [cycleEnvOpen, setCycleEnvOpen] = useState(false);
-
+  // Load runs on mount or active project change
   useEffect(() => {
-    if (activeProject) {
-      fetchTestCycles();
-      fetchTestCases();
+    if (!token) {
+      router.push('/');
+      return;
     }
-  }, [activeProject, fetchTestCycles, fetchTestCases]);
+    if (activeProject) {
+      fetchTestRuns(activeProject.id);
+    }
+  }, [token, activeProject, fetchTestRuns, router]);
 
-  // ── Create Cycle Handlers ───────────────────────────────────────────────────
-  const handleCreateConfirm = async (e: React.FormEvent) => {
+  // Load specific run details when a run is selected
+  useEffect(() => {
+    if (activeRunId) {
+      setLoading(true);
+      fetchTestRunDetails(activeRunId).then((data) => {
+        setLoading(false);
+        if (data && data.results && data.results.length > 0) {
+          setSelectedCaseId(data.results[0].id);
+        }
+      });
+    } else {
+      setSelectedCaseId(null);
+    }
+  }, [activeRunId, fetchTestRunDetails]);
+
+  // Reset checkboxes when selected test case changes
+  useEffect(() => {
+    setCheckedSteps({});
+    setActualResult('');
+  }, [selectedCaseId]);
+
+  const selectedCase = activeTestRun?.results?.find((c: any) => c.id === selectedCaseId);
+
+  const handleStartRun = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeProject || !cycleName) return;
-    await createTestCycle({
+    if (!newRunName.trim() || !activeProject) return;
+
+    setLoading(true);
+    const runId = await startTestRun(activeProject.id, newRunName.trim());
+    setLoading(false);
+
+    if (runId) {
+      setNewRunName('');
+      setShowCreateModal(false);
+      setActiveRunId(runId);
+    }
+  };
+
+  const handleLogResult = async (status: 'PASSED' | 'FAILED' | 'BLOCKED', linkedBugId?: string) => {
+    if (!activeRunId || !selectedCaseId) return;
+
+    setSubmittingResult(true);
+    const success = await logTestCaseResult(
+      activeRunId,
+      selectedCaseId,
+      status,
+      actualResult.trim() || undefined,
+      linkedBugId
+    );
+    setSubmittingResult(false);
+
+    if (success) {
+      // Find the index of the current case to auto-advance
+      const currentIndex = activeTestRun.results.findIndex((c: any) => c.id === selectedCaseId);
+      if (currentIndex !== -1 && currentIndex < activeTestRun.results.length - 1) {
+        setSelectedCaseId(activeTestRun.results[currentIndex + 1].id);
+      }
+    }
+  };
+
+  const handleFailClick = () => {
+    if (!selectedCase) return;
+    
+    // Prefill bug details
+    setBugTitle(`[BUG] - Failed: ${selectedCase.title || selectedCase.scenario || 'Test Case'}`);
+    setBugSeverity('HIGH');
+    setBugPriority('HIGH');
+    setBugEnvironment('QA');
+    setBugBuildVersion('1.0.0');
+    setShowBugModal(true);
+  };
+
+  const handleCreateBugAndFail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCase || !activeProject) return;
+
+    setSubmittingResult(true);
+    const bugData = {
       project_id: activeProject.id,
-      name: cycleName,
-      description: cycleDesc,
-      environment: cycleEnv,
-      status: 'PLANNING',
-      target_modules: selectedModules.length > 0 ? selectedModules : undefined
-    });
-    setShowCreateModal(false);
-    setCycleName('');
-    setCycleDesc('');
-    setSelectedModules([]);
+      title: bugTitle.trim(),
+      module: selectedCase.module || 'General',
+      feature: selectedCase.feature || 'General',
+      description: `Manual test case run failed during execution run.\n\nScenario: ${selectedCase.scenario}`,
+      preconditions: selectedCase.preconditions || '',
+      steps_to_reproduce: selectedCase.steps || '',
+      expected_result: selectedCase.expected_result || '',
+      actual_result: actualResult.trim() || 'Test case step failure observed.',
+      severity: bugSeverity,
+      priority: bugPriority,
+      environment: bugEnvironment,
+      build_version: bugBuildVersion,
+      linked_test_case_id: selectedCase.id,
+      linked_requirement_id: selectedCase.requirement_id
+    };
+
+    const createdBug = await createEnterpriseBug(bugData);
+    if (createdBug) {
+      // Log test case run result with the created bug's id
+      await logTestCaseResult(
+        activeRunId!,
+        selectedCase.id,
+        'FAILED',
+        actualResult.trim() || 'Observed mismatch against expected results.',
+        createdBug.id
+      );
+      setShowBugModal(false);
+    }
+    setSubmittingResult(false);
   };
 
-  const handleCloseCreateModal = () => {
-    setShowCreateModal(false);
-    setCycleName('');
-    setCycleDesc('');
-    setSelectedModules([]);
+  const handleCompleteRun = async () => {
+    if (!activeRunId) return;
+    if (!confirm('Are you sure you want to complete this execution run? No more results can be logged.')) return;
+
+    setLoading(true);
+    await completeTestRun(activeRunId);
+    setLoading(false);
   };
 
-  // ── Cycle Navigation ────────────────────────────────────────────────────────
-  const openCycle = (cycle: any) => {
-    if (!activeProject) return;
-    setActiveCycle(cycle);
-    fetchTestExecutions(cycle.id);
+  // Helper step parser
+  const getStepsArray = (stepsText: string): string[] => {
+    if (!stepsText) return [];
+    return stepsText
+      .split('\n')
+      .map(s => s.replace(/^\d+[\.\-\s]*/, '').trim())
+      .filter(Boolean);
   };
-
-  const closeCycle = () => {
-    setActiveCycle(null);
-    if (activeProject) fetchTestCycles();
-  };
-
-  // ── Execution Handlers ──────────────────────────────────────────────────────
-  const openExecution = async (exec: any) => {
-    setActiveExec(exec);
-    const comments = await getExecutionComments(exec.execution_id);
-    setExecComments(comments);
-  };
-  
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !activeExec) return;
-    await updateExecutionStatus(activeExec.execution_id, { status: activeExec.status, comments: newComment });
-    const comments = await getExecutionComments(activeExec.execution_id);
-    setExecComments(comments);
-    setNewComment('');
-  };
-
-  const updateStatus = async (status: string) => {
-    if (!activeExec) return;
-    await updateExecutionStatus(activeExec.execution_id, { status });
-    setActiveExec({ ...activeExec, status });
-    if (activeCycle) fetchTestExecutions(activeCycle.id);
-  };
-
-  // ── Log Bug Handlers ────────────────────────────────────────────────────────
-  const openLogBug = () => {
-    setLogBugMode('choose');
-    setBugForm(null);
-    setShowLogBugModal(true);
-  };
-
-  const handleGenerateAIBug = async () => {
-    if (!activeExec || !activeProject) return;
-    setLogBugMode('ai-loading');
-    const result = await generateAIBugFromTestCase({
-      project_id: activeProject.id,
-      test_case_id: activeExec.test_case_id,
-      execution_id: activeExec.execution_id,
-      title: activeExec.title || activeExec.scenario,
-      module: activeExec.module,
-      feature: activeExec.feature,
-      scenario: activeExec.scenario,
-      expected_result: activeExec.expected_result,
-      priority: activeExec.priority,
-    });
-    setBugForm(result ? {
-      ...result, linked_test_case_id: activeExec.test_case_id || ''
-    } : {
-      title: `Test Failure: ${activeExec.title || activeExec.scenario}`,
-      module: activeExec.module || '', feature: activeExec.feature || '',
-      description: '', preconditions: '', steps_to_reproduce: '',
-      expected_result: activeExec.expected_result || '', actual_result: '',
-      severity: 'HIGH', priority: activeExec.priority || 'P2',
-      environment: 'QA', root_cause_suggestion: '', tags: ['test-failure'],
-      linked_test_case_id: activeExec.test_case_id || '',
-    });
-    setLogBugMode('form');
-  };
-
-  const handleManualBug = () => {
-    if (!activeExec) return;
-    setBugForm({
-      title: `Test Failure: ${activeExec.title || activeExec.scenario}`,
-      module: activeExec.module || '', feature: activeExec.feature || '',
-      description: '', preconditions: '', steps_to_reproduce: '',
-      expected_result: activeExec.expected_result || '', actual_result: '',
-      severity: 'HIGH', priority: activeExec.priority || 'P2',
-      environment: 'QA', root_cause_suggestion: '', tags: ['test-failure'],
-      linked_test_case_id: activeExec.test_case_id || '',
-    });
-    setLogBugMode('form');
-  };
-
-  const handleSubmitBug = async () => {
-    if (!activeProject || !bugForm || !bugForm.title || !bugForm.steps_to_reproduce) return;
-    setBugFormSaving(true);
-    await createEnterpriseBug({ ...bugForm, project_id: activeProject.id });
-    setShowLogBugModal(false);
-    setBugForm(null);
-    setBugFormSaving(false);
-  };
-
-  const BF = (key: string) => ({
-    value: bugForm?.[key] ?? '',
-    onChange: (e: any) => setBugForm((f: any) => ({ ...f, [key]: e.target.value }))
-  });
-
-  const inputCls = 'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 text-slate-800 placeholder-slate-400';
-
-  const cycleModules = Array.from(new Set((testExecutions || []).map((t: any) => t.module).filter(Boolean))).sort() as string[];
-  const executionsByModule = (testExecutions || []).reduce((acc: any, exec: any) => {
-    const mod = exec.module || 'Unassigned';
-    if (!acc[mod]) acc[mod] = [];
-    acc[mod].push(exec);
-    return acc;
-  }, {});
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground transition-colors duration-300">
+    <div className="flex h-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden">
       <Sidebar />
-      <main className="flex-1 min-w-0 p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6">
-        
-        {!activeCycle ? (
-          <>
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* HEADER */}
+        <header className="border-b border-[#30363d] px-6 py-4 flex items-center justify-between bg-[#161b22] shrink-0">
+          <div>
+            <h1 className="text-base font-bold text-white flex items-center gap-2">
+              <PlayCircle className="w-5 h-5 text-blue-500" />
+              Live Test Runner
+            </h1>
+            <p className="text-xs text-[#8b949e]">Execute your manual tests, record actual results, and auto-report bugs.</p>
+          </div>
+
+          {activeProject && !activeRunId && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-1.5 transition active:scale-95 shadow-md shadow-blue-900/10"
+            >
+              <Plus className="w-4 h-4" />
+              New Test Run
+            </button>
+          )}
+
+          {activeRunId && activeTestRun && activeTestRun.status === 'IN_PROGRESS' && (
+            <button
+              onClick={handleCompleteRun}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-1.5 transition active:scale-95 shadow-md shadow-emerald-900/10"
+            >
+              <Check className="w-4 h-4" />
+              Complete Run
+            </button>
+          )}
+        </header>
+
+        {/* MAIN BODY AREA */}
+        <div className="flex-1 overflow-hidden relative">
+          {!activeProject ? (
+            /* No Project State */
+            <div className="p-12 max-w-xl mx-auto mt-12 bg-[#161b22] border border-[#30363d] rounded-2xl text-center flex flex-col items-center justify-center gap-4 shadow-xl">
+              <div className="w-16 h-16 bg-blue-950/40 border border-blue-500/30 text-blue-400 rounded-full flex items-center justify-center mb-2">
+                <PlayCircle className="w-8 h-8" />
+              </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Test Cycles</h1>
-                <p className="text-xs text-slate-500">Manage testing cycles, sprints, and release readiness.</p>
+                <h2 className="text-base font-black text-white">No Active Project Selected</h2>
+                <p className="text-xs text-[#8b949e] mt-1.5">
+                  Choose a project from the selector below to view test runs or start executing tests.
+                </p>
               </div>
-              <button onClick={() => setShowCreateModal(true)} className="px-4 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
-                <Plus className="w-4 h-4" /> New Test Cycle
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(testCycles || []).map((cycle: any) => (
-                <div key={cycle.id} onClick={() => openCycle(cycle)} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition cursor-pointer group flex flex-col gap-4">
-                  
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-lg text-slate-900 group-hover:text-[#2563EB] transition line-clamp-1">{cycle.name}</h3>
-                      <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{cycle.description || 'No description'}</p>
-                    </div>
-                    <span className={`px-2 py-1 text-[9px] font-black rounded uppercase border ${
-                      cycle.status === 'ACTIVE' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                      cycle.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-200' :
-                      'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}>
-                      {cycle.status}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500">
-                    <span className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded"><MapPin className="w-3 h-3" /> {cycle.environment}</span>
-                    <span className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded"><Calendar className="w-3 h-3" /> {new Date(cycle.created_at).toLocaleDateString()}</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-4 gap-2 mt-auto">
-                    <div className="flex flex-col items-center p-2 bg-slate-50 rounded-lg">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Total</span>
-                      <span className="font-black text-slate-700">{cycle.total_cases || 0}</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-green-50 rounded-lg">
-                      <span className="text-[9px] font-bold text-green-600/70 uppercase">Pass</span>
-                      <span className="font-black text-green-600">{cycle.passed_cases || 0}</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-red-50 rounded-lg">
-                      <span className="text-[9px] font-bold text-red-600/70 uppercase">Fail</span>
-                      <span className="font-black text-red-600">{cycle.failed_cases || 0}</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-orange-50 rounded-lg">
-                      <span className="text-[9px] font-bold text-orange-600/70 uppercase">Skip</span>
-                      <span className="font-black text-orange-600">{cycle.skipped_cases || 0}</span>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden flex">
-                    {cycle.total_cases > 0 ? (
-                      <>
-                        <div style={{ width: `${(cycle.passed_cases / cycle.total_cases) * 100}%` }} className="bg-green-500 h-full"></div>
-                        <div style={{ width: `${(cycle.failed_cases / cycle.total_cases) * 100}%` }} className="bg-red-500 h-full"></div>
-                        <div style={{ width: `${(cycle.skipped_cases / cycle.total_cases) * 100}%` }} className="bg-orange-400 h-full"></div>
-                      </>
-                    ) : <div className="w-full bg-slate-200"></div>}
-                  </div>
-                </div>
-              ))}
-              {(!testCycles || testCycles.length === 0) && (
-                 <div className="col-span-full py-12 text-center text-slate-500 text-sm">No test cycles found. Create one to get started!</div>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-col gap-6">
-              <button onClick={closeCycle} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 w-fit transition">
-                <ChevronLeft className="w-4 h-4" /> Back to Cycles
-              </button>
-              
-              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-5 gap-4">
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                    <PlayCircle className="w-7 h-7 text-[#2563EB]" />
-                    {activeCycle.name}
-                  </h1>
-                  <p className="text-sm text-slate-500 mt-1.5">{activeCycle.description || 'No description provided'}</p>
-                </div>
-                <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-600">
-                  <span className="flex items-center gap-1 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full"><MapPin className="w-3 h-3 text-[#2563EB]" /> {activeCycle.environment}</span>
-                  <span className="flex items-center gap-1 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full"><Calendar className="w-3 h-3 text-[#2563EB]" /> {new Date(activeCycle.created_at).toLocaleDateString()}</span>
-                  <span className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-[#2563EB] px-2.5 py-1 rounded-full">
-                    <Layout className="w-3 h-3" /> {Object.keys(executionsByModule).length} Modules Included
-                  </span>
-                </div>
+              <div className="w-full max-w-xs mt-2">
+                <select
+                  value={activeProject?.id || ''}
+                  onChange={(e) => {
+                    const proj = projects.find(p => p.id === e.target.value);
+                    if (proj) setActiveProject(proj);
+                  }}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-[#c9d1d9] focus:outline-none focus:border-blue-500"
+                >
+                  <option value="" disabled>Choose a project...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
               </div>
-
-              {Object.keys(executionsByModule).length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 text-sm shadow-sm">
-                  No executions found in this cycle. Add test cases to get started.
+            </div>
+          ) : !activeRunId ? (
+            /* 1. RUN LIST VIEW */
+            <div className="p-6 overflow-y-auto h-full max-w-6xl mx-auto w-full">
+              {loading ? (
+                <div className="flex items-center justify-center h-64 text-xs text-[#8b949e]">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+                  Loading test runs...
+                </div>
+              ) : testRuns.length === 0 ? (
+                <div className="p-12 border border-dashed border-[#30363d] rounded-2xl text-center flex flex-col items-center justify-center gap-3">
+                  <ClipboardList className="w-10 h-10 text-[#8b949e]" />
+                  <p className="text-sm font-bold text-white">No Test Runs Executed Yet</p>
+                  <p className="text-xs text-[#8b949e] max-w-sm">Create a new test run to start checking your test cases and logging quality assurance reports.</p>
+                  <button onClick={() => setShowCreateModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg mt-1 transition active:scale-95">
+                    Start Your First Run
+                  </button>
                 </div>
               ) : (
-                <div className="flex flex-col gap-8">
-                  {Object.keys(executionsByModule).map((moduleName) => {
-                    const moduleExecs = executionsByModule[moduleName] || [];
-                    const passedCount = moduleExecs.filter((r: any) => r.status === 'PASS').length;
-                    const totalCount = moduleExecs.length;
-                    const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
-
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {testRuns.map((run) => {
+                    const total = run.stats.total || 0;
+                    const executed = run.stats.executed || 0;
+                    const passed = run.stats.passed || 0;
+                    const failed = run.stats.failed || 0;
+                    const percent = total > 0 ? Math.round((executed / total) * 100) : 0;
+                    
                     return (
-                      <div key={moduleName} className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between px-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-extrabold text-sm text-slate-800 tracking-wide uppercase">
-                              Module: {moduleName}
-                            </h3>
-                            <span className="text-xs text-slate-500 font-medium">
-                              ({totalCount} {totalCount === 1 ? 'case' : 'cases'})
+                      <div
+                        key={run.id}
+                        onClick={() => setActiveRunId(run.id)}
+                        className="bg-[#161b22] border border-[#30363d] hover:border-blue-500/50 rounded-2xl p-5 shadow-lg hover:shadow-xl transition duration-200 cursor-pointer flex flex-col justify-between h-48"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${run.status === 'COMPLETED' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-blue-400 bg-blue-500/10 border-blue-500/20'}`}>
+                              {run.status}
                             </span>
+                            <span className="text-[10px] text-[#8b949e]">{new Date(run.created_at).toLocaleDateString()}</span>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden flex shadow-inner">
-                              <div style={{ width: `${passRate}%` }} className="bg-green-500 h-full"></div>
-                            </div>
-                            <span className="text-xs font-bold text-slate-600">
-                              {passedCount}/{totalCount} Passed ({passRate}%)
-                            </span>
+                          <h3 className="text-sm font-black text-white line-clamp-1">{run.name}</h3>
+                          <div className="text-[10px] text-[#8b949e] flex items-center gap-1 mt-1">
+                            <User className="w-3.5 h-3.5" />
+                            {run.tester_name}
                           </div>
                         </div>
 
-                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                          <table className="w-full text-left border-collapse">
-                            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                              <tr>
-                                <th className="p-4 w-28">TC ID</th>
-                                <th className="p-4 w-1/3">Title / Scenario</th>
-                                <th className="p-4">Priority</th>
-                                <th className="p-4">Status</th>
-                                <th className="p-4">Tester</th>
-                                <th className="p-4 text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-sm">
-                              {moduleExecs.map((exec: any) => (
-                                <tr key={exec.execution_id} className="hover:bg-slate-50/50 transition cursor-pointer" onClick={() => openExecution(exec)}>
-                                  <td className="p-4 font-mono font-bold text-xs text-slate-600">{exec.custom_id}</td>
-                                  <td className="p-4">
-                                    <div className="font-semibold text-slate-800 line-clamp-1">{exec.title || exec.scenario}</div>
-                                    {exec.feature && (
-                                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{exec.feature}</div>
-                                    )}
-                                  </td>
-                                  <td className="p-4">
-                                    <span className={`px-2 py-0.5 rounded border text-[9px] font-black uppercase ${
-                                      exec.priority === 'P1' || exec.priority === 'CRITICAL' ? 'bg-rose-50 text-rose-600 border-rose-200' : 
-                                      exec.priority === 'P2' || exec.priority === 'HIGH' ? 'bg-orange-50 text-orange-600 border-orange-200' : 
-                                      'bg-slate-50 text-slate-600 border-slate-200'
-                                    }`}>
-                                      {exec.priority}
-                                    </span>
-                                  </td>
-                                  <td className="p-4">
-                                     <span className={`px-2.5 py-1 rounded-full text-[9px] border font-bold uppercase tracking-wider flex w-fit items-center gap-1 ${
-                                       exec.status === 'PASS' ? 'bg-green-50 text-green-700 border-green-200' : 
-                                       exec.status === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : 
-                                       exec.status === 'SKIP' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
-                                       exec.status === 'BLOCKED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 
-                                       'bg-slate-100 text-slate-600 border-slate-200'
-                                     }`}>
-                                       {exec.status === 'NOT_EXECUTED' ? 'Not Run' : exec.status}
-                                     </span>
-                                  </td>
-                                  <td className="p-4 text-xs font-semibold text-slate-500">
-                                    {exec.executed_by_name || '-'}
-                                  </td>
-                                  <td className="p-4 text-right">
-                                    <button className="px-3 py-1.5 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded transition shadow-sm">
-                                      Execute
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-[10px] text-[#8b949e]">
+                            <span>Progress ({percent}%)</span>
+                            <span>{executed}/{total} Executed</span>
+                          </div>
+                          <div className="w-full h-2 bg-[#0d1117] border border-[#30363d] rounded-full overflow-hidden flex">
+                            <div className="h-full bg-emerald-500" style={{ width: `${total > 0 ? (passed / total) * 100 : 0}%` }} title={`Passed: ${passed}`} />
+                            <div className="h-full bg-rose-500" style={{ width: `${total > 0 ? (failed / total) * 100 : 0}%` }} title={`Failed: ${failed}`} />
+                            <div className="h-full bg-orange-400" style={{ width: `${total > 0 ? ((executed - passed - failed) / total) * 100 : 0}%` }} title="Blocked/Other" />
+                          </div>
+                          <div className="flex items-center justify-between text-[9px] font-bold">
+                            <span className="text-emerald-400">Passed: {passed}</span>
+                            <span className="text-rose-400">Failed: {failed}</span>
+                            <span className="text-[#8b949e]">Unexecuted: {total - executed}</span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -376,409 +316,402 @@ export default function TestExecution() {
                 </div>
               )}
             </div>
-          </>
-        )}
-      </main>
-
-      {/* ── Create Cycle Modal ─────────────────────────────────────────────────── */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleCreateConfirm} className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-200 bg-slate-50">
-              <h2 className="text-lg font-bold text-slate-900">Create Test Cycle</h2>
-              <p className="text-xs text-slate-500 mt-1">Group test cases for a specific release or sprint.</p>
-            </div>
-            <div className="p-6 flex flex-col gap-4">
-              <div>
-                <label className="text-xs font-bold text-slate-700 mb-1 block">Cycle Name *</label>
-                <input required value={cycleName} onChange={e => setCycleName(e.target.value)} placeholder="e.g. Sprint 12 Regression" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-700 mb-1 block">Description</label>
-                <textarea value={cycleDesc} onChange={e => setCycleDesc(e.target.value)} placeholder="Testing goals..." className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 resize-none h-16" />
-              </div>
-              <div className="relative">
-                <label className="text-xs font-bold text-slate-700 mb-1 block">Environment</label>
-                <button
-                  type="button"
-                  onClick={() => setCycleEnvOpen(!cycleEnvOpen)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 flex items-center justify-between text-slate-800 font-semibold hover:bg-slate-100/50 transition"
-                >
-                  <span>{cycleEnv}</span>
-                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                </button>
-                {cycleEnvOpen && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold text-slate-700">
-                    {['QA', 'STAGING', 'UAT', 'PROD'].map(env => (
-                      <button
-                        type="button"
-                        key={env}
-                        onClick={() => {
-                          setCycleEnv(env);
-                          setCycleEnvOpen(false);
-                        }}
-                        className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition ${cycleEnv === env ? 'bg-blue-50/50 text-[#2563EB]' : ''}`}
-                      >
-                        {env}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Target Modules</label>
-                  <button type="button" onClick={handleSelectAllModules} className="text-[10px] font-bold text-[#2563EB] hover:text-blue-700 transition">
-                    {allModulesSelected ? 'Deselect All' : 'Select All'}
+          ) : (
+            /* 2. ACTIVE RUNNER VIEW (Split Screen Workspace) */
+            <div className="flex h-full overflow-hidden">
+              {/* LEFT PANE: Case List */}
+              <div className="w-80 border-r border-[#30363d] bg-[#161b22] flex flex-col shrink-0">
+                <div className="p-3 border-b border-[#30363d] flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveRunId(null)}
+                    className="p-1.5 hover:bg-[#30363d] rounded-lg text-[#8b949e] hover:text-white transition"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-bold text-white line-clamp-1">{activeTestRun?.name}</h3>
+                    <p className="text-[10px] text-[#8b949e] uppercase font-bold tracking-wider">{activeTestRun?.status}</p>
+                  </div>
                 </div>
-                {uniqueModules.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic py-2">No modules found. Create test cases first.</p>
-                ) : (
-                  <div className="border border-slate-200 rounded-lg overflow-y-auto max-h-44 divide-y divide-slate-100">
-                    {uniqueModules.map(mod => {
-                      const isChecked = selectedModules.includes(mod);
+
+                <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                  {loading ? (
+                    <div className="text-center text-xs text-[#8b949e] py-8">Loading...</div>
+                  ) : activeTestRun?.results?.length === 0 ? (
+                    <div className="text-center text-xs text-[#8b949e] py-8">No test cases found in this project.</div>
+                  ) : (
+                    activeTestRun?.results?.map((c: any) => {
+                      const isSelected = c.id === selectedCaseId;
                       return (
-                        <label key={mod} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer text-sm transition select-none ${isChecked ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
-                          <div
-                            className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition ${isChecked ? 'bg-[#2563EB] border-[#2563EB]' : 'border-slate-300 bg-white'}`}
-                            onClick={() => toggleModule(mod)}
-                          >
-                            {isChecked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                        <div
+                          key={c.id}
+                          onClick={() => setSelectedCaseId(c.id)}
+                          className={`p-3 rounded-xl border transition cursor-pointer flex items-center gap-3 ${isSelected ? 'bg-blue-950/20 border-blue-500 text-white' : 'bg-[#0d1117]/40 border-[#30363d] hover:border-[#8b949e]/50'}`}
+                        >
+                          <div className="shrink-0">
+                            {c.status === 'PASSED' && <CheckCircle className="w-4 h-4 text-emerald-400" />}
+                            {c.status === 'FAILED' && <XCircle className="w-4 h-4 text-rose-500" />}
+                            {c.status === 'BLOCKED' && <AlertTriangle className="w-4 h-4 text-orange-400" />}
+                            {c.status === 'UNEXECUTED' && <Clock className="w-4 h-4 text-[#8b949e]" />}
                           </div>
-                          <span onClick={() => toggleModule(mod)} className={`font-medium ${isChecked ? 'text-blue-700' : 'text-slate-700'}`}>{mod}</span>
-                        </label>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-[9px] font-bold text-blue-500">{c.custom_id}</span>
+                              <span className="text-[9px] text-[#8b949e] uppercase tracking-wider font-extrabold">{c.priority}</span>
+                            </div>
+                            <h4 className="text-xs font-semibold line-clamp-2">{c.title || c.scenario}</h4>
+                          </div>
+                        </div>
                       );
-                    })}
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* RIGHT PANE: Case Details & Runner Actions */}
+              <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden">
+                {selectedCase ? (
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Test Case Header info */}
+                    <div className="p-5 border-b border-[#30363d] bg-[#161b22] shrink-0">
+                      <div className="flex items-center gap-2 text-[10px] text-[#8b949e] uppercase font-bold tracking-wider mb-1.5">
+                        <Layers className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{selectedCase.module || 'Core Module'}</span>
+                        <span>•</span>
+                        <span>{selectedCase.feature || 'General Feature'}</span>
+                      </div>
+                      <h2 className="text-base font-black text-white">{selectedCase.custom_id}: {selectedCase.title || selectedCase.scenario}</h2>
+                    </div>
+
+                    {/* Test Case Details Workspace */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                      {/* Scenario Summary */}
+                      <div>
+                        <span className="text-[10px] font-extrabold uppercase text-[#8b949e] tracking-wider block mb-1.5">Scenario / Objective</span>
+                        <div className="bg-[#161b22] border border-[#30363d] p-3 rounded-xl text-xs text-[#c9d1d9] leading-relaxed">
+                          {selectedCase.scenario}
+                        </div>
+                      </div>
+
+                      {/* Preconditions */}
+                      {selectedCase.preconditions && (
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase text-[#8b949e] tracking-wider block mb-1.5">Preconditions</span>
+                          <div className="bg-amber-950/10 border border-amber-500/20 p-3 rounded-xl text-xs text-amber-200/90 leading-relaxed flex items-start gap-2">
+                            <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                            <span>{selectedCase.preconditions}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Steps Checklist */}
+                      <div>
+                        <span className="text-[10px] font-extrabold uppercase text-[#8b949e] tracking-wider block mb-1.5">Execution Steps</span>
+                        <div className="space-y-2">
+                          {getStepsArray(selectedCase.steps).map((step, idx) => {
+                            const isChecked = checkedSteps[idx] || false;
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => setCheckedSteps(prev => ({ ...prev, [idx]: !isChecked }))}
+                                className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${isChecked ? 'bg-[#30363d]/15 border-blue-500/40 text-[#8b949e]' : 'bg-[#161b22] border-[#30363d] hover:border-[#8b949e]/30'}`}
+                              >
+                                <div className="mt-0.5 shrink-0">
+                                  <div className={`w-4.5 h-4.5 rounded border flex items-center justify-center transition ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-[#30363d] bg-[#0d1117]'}`}>
+                                    {isChecked && <Check className="w-3 h-3" />}
+                                  </div>
+                                </div>
+                                <div className="text-xs leading-relaxed">
+                                  <span className="font-extrabold text-blue-500 mr-1.5">{idx + 1}.</span>
+                                  {step}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Expected Result */}
+                      <div>
+                        <span className="text-[10px] font-extrabold uppercase text-[#8b949e] tracking-wider block mb-1.5">Expected Result</span>
+                        <div className="bg-blue-950/10 border border-blue-500/20 p-3 rounded-xl text-xs text-blue-200/90 leading-relaxed">
+                          {selectedCase.expected_result}
+                        </div>
+                      </div>
+
+                      {/* Execution Details (if previously run) */}
+                      {selectedCase.status !== 'UNEXECUTED' && (
+                        <div className="p-4 bg-[#161b22] border border-[#30363d] rounded-2xl space-y-2.5">
+                          <span className="text-[10px] font-extrabold uppercase text-[#8b949e] tracking-wider block">Execution Log</span>
+                          <div className="grid grid-cols-2 gap-4 text-xs">
+                            <div>
+                              <span className="text-[#8b949e] block">Status:</span>
+                              <span className={`font-bold ${selectedCase.status === 'PASSED' ? 'text-emerald-400' : selectedCase.status === 'FAILED' ? 'text-rose-400' : 'text-orange-400'}`}>
+                                {selectedCase.status}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[#8b949e] block">Tester:</span>
+                              <span className="text-white">{selectedCase.executed_by || 'Unknown'}</span>
+                            </div>
+                            {selectedCase.actual_result && (
+                              <div className="col-span-2">
+                                <span className="text-[#8b949e] block">Actual Result Details:</span>
+                                <p className="text-white mt-1 bg-[#0d1117] p-2 rounded border border-[#30363d] text-[11px] leading-relaxed">{selectedCase.actual_result}</p>
+                              </div>
+                            )}
+                            {selectedCase.bug_id && (
+                              <div className="col-span-2">
+                                <span className="text-[#8b949e] block">Linked Issue:</span>
+                                <button
+                                  onClick={() => router.push(`/bugs?id=${selectedCase.bug_id}`)}
+                                  className="inline-flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 font-bold mt-1"
+                                >
+                                  <Bug className="w-3.5 h-3.5 text-rose-400" />
+                                  View Linked Bug
+                                  <ExternalLink className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Input for Actual Result */}
+                      {activeTestRun?.status === 'IN_PROGRESS' && (
+                        <div>
+                          <label className="text-[10px] font-extrabold uppercase text-[#8b949e] tracking-wider block mb-1.5">Actual Result (Observed / Notes)</label>
+                          <textarea
+                            placeholder="Enter test execution observations, log mismatch, or pass notes here..."
+                            value={actualResult}
+                            onChange={(e) => setActualResult(e.target.value)}
+                            className="w-full bg-[#161b22] border border-[#30363d] rounded-xl px-3.5 py-3 text-xs text-white placeholder-[#8b949e] focus:outline-none focus:border-blue-500 h-24 resize-none leading-relaxed"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* RUNNER CONTROL ACTIONS FOOTER */}
+                    {activeTestRun?.status === 'IN_PROGRESS' && (
+                      <div className="border-t border-[#30363d] p-4 bg-[#161b22] flex items-center justify-between shrink-0">
+                        <div className="text-[10px] text-[#8b949e]">
+                          {Object.keys(checkedSteps).filter(k => checkedSteps[parseInt(k)]).length} of {getStepsArray(selectedCase.steps).length} steps checked
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleLogResult('BLOCKED')}
+                            disabled={submittingResult}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                            Block
+                          </button>
+                          
+                          <button
+                            onClick={handleFailClick}
+                            disabled={submittingResult}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50"
+                          >
+                            <Bug className="w-4 h-4" />
+                            Fail & Create Bug
+                          </button>
+
+                          <button
+                            onClick={() => handleLogResult('PASSED')}
+                            disabled={submittingResult}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50"
+                          >
+                            {submittingResult ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                            Pass Test
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-[#8b949e]">
+                    <ClipboardList className="w-8 h-8 text-[#30363d]" />
+                    Select a test case from the left panel to begin.
                   </div>
                 )}
-                <p className="text-[10px] text-slate-400 mt-1.5">
-                  {selectedModules.length === 0 ? 'No modules selected — all test cases will be included.' : `${selectedModules.length} module${selectedModules.length > 1 ? 's' : ''} selected`}
-                </p>
               </div>
             </div>
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button type="button" onClick={handleCloseCreateModal} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-xs font-bold bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg transition shadow-sm">Create Cycle</button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Create Run Modal ───────────────────────────────────────────── */}
+      {showCreateModal && activeProject && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleStartRun}
+            className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-bold text-white flex items-center gap-1.5">
+                <PlayCircle className="w-5 h-5 text-blue-500" />
+                Start Test Run
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="p-1.5 rounded-lg hover:bg-[#30363d] text-[#8b949e] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Test Run Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sprint 4 Regression, Release 1.2.0 Cycle"
+                  value={newRunName}
+                  onChange={(e) => setNewRunName(e.target.value)}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-[#c9d1d9] placeholder-[#8b949e] focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-xs font-medium text-[#8b949e] hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !newRunName.trim()}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition active:scale-95 shadow-md shadow-blue-900/10"
+              >
+                {loading ? 'Starting...' : 'Start Execution'}
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ── Execute Test Drawer ────────────────────────────────────────────────── */}
-      {activeExec && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
-          <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center gap-3">
-                <span className="font-mono font-bold text-[#2563EB] text-sm">{activeExec.custom_id}</span>
-                <span className={`px-2.5 py-1 rounded-full text-[9px] border font-black uppercase tracking-wider flex w-fit items-center gap-1 ${
-                  activeExec.status === 'PASS' ? 'bg-green-50 text-green-700 border-green-200' : 
-                  activeExec.status === 'FAIL' ? 'bg-red-50 text-red-700 border-red-200' : 
-                  activeExec.status === 'SKIP' ? 'bg-orange-50 text-orange-700 border-orange-200' : 
-                  activeExec.status === 'BLOCKED' ? 'bg-rose-50 text-rose-700 border-rose-200' : 
-                  'bg-slate-100 text-slate-600 border-slate-200'
-                }`}>
-                  {activeExec.status === 'NOT_EXECUTED' ? 'Not Run' : activeExec.status}
-                </span>
-              </div>
-              <button onClick={() => setActiveExec(null)} className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-900 rounded-full transition"><X className="w-5 h-5" /></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
-              
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 mb-2">{activeExec.title || activeExec.scenario}</h2>
-                <div className="flex gap-4 text-xs font-bold text-slate-500 mb-6 border-b border-slate-100 pb-4">
-                  <span>Module: <span className="text-slate-900">{activeExec.module}</span></span>
-                  <span>Feature: <span className="text-slate-900">{activeExec.feature}</span></span>
-                  <span>Priority: <span className="text-slate-900">{activeExec.priority}</span></span>
-                </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Expected Result</h3>
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 mb-6">
-                  {activeExec.expected_result}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Record Execution</h3>
-                <div className="flex flex-wrap gap-3">
-                  <button onClick={() => updateStatus('PASS')} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-green-200 hover:border-green-500 hover:bg-green-50 rounded-xl text-green-700 font-bold text-sm transition">
-                    <CheckCircle2 className="w-5 h-5" /> Pass
-                  </button>
-                  <button onClick={() => updateStatus('FAIL')} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-red-200 hover:border-red-500 hover:bg-red-50 rounded-xl text-red-700 font-bold text-sm transition">
-                    <XCircle className="w-5 h-5" /> Fail
-                  </button>
-                  <button onClick={() => updateStatus('BLOCKED')} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-rose-200 hover:border-rose-500 hover:bg-rose-50 rounded-xl text-rose-700 font-bold text-sm transition">
-                    <AlertTriangle className="w-5 h-5" /> Block
-                  </button>
-                  <button onClick={() => updateStatus('SKIP')} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-orange-200 hover:border-orange-500 hover:bg-orange-50 rounded-xl text-orange-700 font-bold text-sm transition">
-                    <Clock className="w-5 h-5" /> Skip
-                  </button>
-                </div>
-              </div>
-
-              {activeExec.status === 'FAIL' && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-red-600 shadow-sm"><Bug className="w-5 h-5" /></div>
-                    <div>
-                      <h4 className="font-bold text-red-900 text-sm">Test Failed</h4>
-                      <p className="text-xs text-red-700">Log a bug for this failure to track its resolution.</p>
-                    </div>
-                  </div>
-                  <button onClick={openLogBug} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg shadow-sm transition">
-                    Log Bug
-                  </button>
-                </div>
-              )}
-
-              <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-slate-400" />
-                  Execution Comments
-                </h3>
-                <div className="flex flex-col gap-4 mb-4">
-                  {execComments.map(c => (
-                    <div key={c.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="font-bold text-slate-800">{c.author_name}</span>
-                        <span className="text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</span>
-                      </div>
-                      <p className="text-slate-600">{c.content}</p>
-                    </div>
-                  ))}
-                  {execComments.length === 0 && <p className="text-xs text-slate-500 italic">No comments on this execution yet.</p>}
-                </div>
-                <div className="flex gap-2">
-                  <input 
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddComment()}
-                    placeholder="Add a comment or actual result..."
-                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50"
-                  />
-                  <button onClick={handleAddComment} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-lg transition">Post</button>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Log Bug Modal ──────────────────────────────────────────────────────── */}
-      {showLogBugModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            
-            {/* Header */}
-            <div className="p-6 border-b border-slate-200 bg-slate-50 rounded-t-2xl flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
-                  <Bug className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">Log Bug</h2>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    {activeExec ? `From: ${activeExec.custom_id} — ${activeExec.title || activeExec.scenario}` : ''}
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowLogBugModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-900 rounded-full transition">
-                <X className="w-5 h-5" />
+      {/* ─── Auto Bug Creation Modal ────────────────────────────────────── */}
+      {showBugModal && selectedCase && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleCreateBugAndFail}
+            className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Bug className="w-5 h-5 text-rose-500 animate-pulse" />
+                Report Case Failure & Log Bug
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowBugModal(false)}
+                className="p-1.5 rounded-lg hover:bg-[#30363d] text-[#8b949e] hover:text-white"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Choose Mode */}
-            {logBugMode === 'choose' && (
-              <div className="p-8 flex flex-col items-center gap-6">
-                <p className="text-sm text-slate-500 text-center max-w-sm">
-                  How would you like to create the bug report for this test failure?
-                </p>
-                <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                  <button
-                    onClick={handleGenerateAIBug}
-                    className="flex flex-col items-center gap-3 p-6 bg-gradient-to-br from-[#2563EB] to-blue-600 text-white rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              <div>
+                <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Bug Title</label>
+                <input
+                  type="text"
+                  required
+                  value={bugTitle}
+                  onChange={(e) => setBugTitle(e.target.value)}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Severity</label>
+                  <select
+                    value={bugSeverity}
+                    onChange={(e) => setBugSeverity(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                   >
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:bg-white/30 transition">
-                      <Sparkles className="w-6 h-6" />
-                    </div>
-                    <div className="text-center">
-                      <p className="font-bold text-sm">Generate with AI</p>
-                      <p className="text-[10px] text-blue-100 mt-0.5">Auto-fill all fields from test case context</p>
-                    </div>
-                  </button>
-                  <button
-                    onClick={handleManualBug}
-                    className="flex flex-col items-center gap-3 p-6 bg-white border-2 border-slate-200 text-slate-700 rounded-2xl hover:border-slate-400 hover:shadow-md transition-all duration-200 group"
+                    {SEVERITY_OPTIONS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Priority</label>
+                  <select
+                    value={bugPriority}
+                    onChange={(e) => setBugPriority(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                   >
-                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center group-hover:bg-slate-200 transition">
-                      <FileEdit className="w-6 h-6 text-slate-600" />
-                    </div>
-                    <div className="text-center">
-                      <p className="font-bold text-sm">Fill Manually</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Start with basic info pre-filled</p>
-                    </div>
-                  </button>
+                    {PRIORITY_OPTIONS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Environment</label>
+                  <input
+                    type="text"
+                    required
+                    value={bugEnvironment}
+                    onChange={(e) => setBugEnvironment(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Build / Release Version</label>
+                  <input
+                    type="text"
+                    required
+                    value={bugBuildVersion}
+                    onChange={(e) => setBugBuildVersion(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
                 </div>
               </div>
-            )}
 
-            {/* AI Loading */}
-            {logBugMode === 'ai-loading' && (
-              <div className="p-12 flex flex-col items-center gap-4">
-                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center">
-                  <Loader2 className="w-7 h-7 text-[#2563EB] animate-spin" />
-                </div>
-                <div className="text-center">
-                  <p className="font-bold text-slate-900">AI is analyzing the test failure...</p>
-                  <p className="text-sm text-slate-500 mt-1">Generating a structured bug report from the test case context</p>
-                </div>
+              {/* Readonly Prefilled Data display */}
+              <div className="bg-[#0d1117] border border-[#30363d] p-3 rounded-xl text-[11px] space-y-2 text-[#8b949e]">
+                <p><strong className="text-white">Steps to Reproduce (Auto-imported):</strong></p>
+                <p className="whitespace-pre-wrap leading-relaxed">{selectedCase.steps}</p>
+                <p><strong className="text-white">Expected Result (Auto-imported):</strong></p>
+                <p className="leading-relaxed">{selectedCase.expected_result}</p>
+                <p><strong className="text-white">Actual Result (Your observations):</strong></p>
+                <p className="italic text-rose-300 leading-relaxed">{actualResult.trim() || 'Observed failure mismatch.'}</p>
               </div>
-            )}
+            </div>
 
-            {/* Bug Form */}
-            {logBugMode === 'form' && bugForm && (
-              <>
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-                  {bugForm.root_cause_suggestion && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 font-semibold">
-                      <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
-                      AI-generated — all fields are editable before submitting.
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Bug Title *</label>
-                    <input {...BF('title')} className={inputCls} placeholder="Concise description of the bug" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Module</label>
-                      <input {...BF('module')} className={inputCls} placeholder="e.g. Authentication" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Feature</label>
-                      <input {...BF('feature')} className={inputCls} placeholder="e.g. Login Form" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Severity</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBugSeverityOpen(!bugSeverityOpen);
-                          setBugPriorityOpen(false);
-                        }}
-                        className={`${inputCls} flex items-center justify-between`}
-                      >
-                        <span>{bugForm.severity || 'HIGH'}</span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                      </button>
-                      {bugSeverityOpen && (
-                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold text-slate-700">
-                          {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => (
-                            <button
-                              type="button"
-                              key={s}
-                              onClick={() => {
-                                setBugForm({ ...bugForm, severity: s });
-                                setBugSeverityOpen(false);
-                              }}
-                              className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition ${bugForm.severity === s ? 'bg-blue-50/55 text-[#2563EB]' : ''}`}
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Priority</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBugPriorityOpen(!bugPriorityOpen);
-                          setBugSeverityOpen(false);
-                        }}
-                        className={`${inputCls} flex items-center justify-between`}
-                      >
-                        <span>{bugForm.priority === 'P1' ? 'P1 — Critical' : bugForm.priority === 'P2' ? 'P2 — High' : bugForm.priority === 'P3' ? 'P3 — Medium' : bugForm.priority === 'P4' ? 'P4 — Low' : bugForm.priority || 'P2'}</span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                      </button>
-                      {bugPriorityOpen && (
-                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 font-semibold text-slate-700">
-                          {[
-                            { value: 'P1', label: 'P1 — Critical' },
-                            { value: 'P2', label: 'P2 — High' },
-                            { value: 'P3', label: 'P3 — Medium' },
-                            { value: 'P4', label: 'P4 — Low' }
-                          ].map(p => (
-                            <button
-                              type="button"
-                              key={p.value}
-                              onClick={() => {
-                                setBugForm({ ...bugForm, priority: p.value });
-                                setBugPriorityOpen(false);
-                              }}
-                              className={`w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition ${bugForm.priority === p.value ? 'bg-blue-50/55 text-[#2563EB]' : ''}`}
-                            >
-                              {p.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Description</label>
-                    <textarea {...BF('description')} rows={3} className={`${inputCls} resize-none`} placeholder="Full bug description..." />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Steps to Reproduce *</label>
-                    <textarea {...BF('steps_to_reproduce')} rows={4} className={`${inputCls} resize-none font-mono text-xs`} placeholder={"1. Step one\n2. Step two\n3. Step three"} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Expected Result</label>
-                      <textarea {...BF('expected_result')} rows={2} className={`${inputCls} resize-none`} placeholder="What should happen..." />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Actual Result</label>
-                      <textarea {...BF('actual_result')} rows={2} className={`${inputCls} resize-none`} placeholder="What actually happened..." />
-                    </div>
-                  </div>
-                  {bugForm.root_cause_suggestion && (
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Root Cause (AI Suggestion)</label>
-                      <textarea {...BF('root_cause_suggestion')} rows={2} className={`${inputCls} resize-none`} />
-                    </div>
-                  )}
-                </div>
-                <div className="p-4 border-t border-slate-200 flex justify-between items-center bg-slate-50 rounded-b-2xl flex-shrink-0">
-                  <button onClick={() => setLogBugMode('choose')} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition">
-                    ← Back
-                  </button>
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowLogBugModal(false)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition">Cancel</button>
-                    <button
-                      onClick={handleSubmitBug}
-                      disabled={bugFormSaving || !bugForm.title || !bugForm.steps_to_reproduce}
-                      className="px-5 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition flex items-center gap-2 shadow-sm"
-                    >
-                      {bugFormSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bug className="w-3.5 h-3.5" />}
-                      {bugFormSaving ? 'Logging...' : 'Log Bug'}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-
-          </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowBugModal(false)}
+                className="px-4 py-2 text-xs font-medium text-[#8b949e] hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submittingResult}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition active:scale-95 shadow-md shadow-rose-900/10 flex items-center gap-1.5"
+              >
+                {submittingResult && <Loader2 className="w-4 h-4 animate-spin" />}
+                Log Bug & Fail Case
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
+      <Copilot />
     </div>
   );
 }

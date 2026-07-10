@@ -240,10 +240,19 @@ interface AppState {
  activeProject: Project | null;
   testCycles: TestCycle[];
  testExecutions: TestExecution[];
- fetchTestCycles: () => Promise<void>;
- fetchTestExecutions: (cycleId: string) => Promise<void>;
- createTestCycle: (data: any) => Promise<string | null>;
- updateExecutionStatus: (execId: string, data: any) => Promise<boolean>;
+ testRuns: any[];
+ activeTestRun: any | null;
+  fetchTestCycles: () => Promise<void>;
+  fetchTestExecutions: (cycleId: string) => Promise<void>;
+  createTestCycle: (data: any) => Promise<string | null>;
+  updateExecutionStatus: (execId: string, data: any) => Promise<boolean>;
+
+  // Test Runs actions
+  fetchTestRuns: (projectId: string) => Promise<void>;
+  startTestRun: (projectId: string, name: string) => Promise<string | null>;
+  fetchTestRunDetails: (runId: string) => Promise<any | null>;
+  logTestCaseResult: (runId: string, testCaseId: string, status: string, actualResult?: string, bugId?: string) => Promise<boolean>;
+  completeTestRun: (runId: string) => Promise<boolean>;
  getExecutionComments: (execId: string) => Promise<ExecutionComment[]>;
  testCases: TestCase[];
  bugs: BugReport[];
@@ -349,6 +358,8 @@ export const useAppStore = create<AppState>((set, get) => ({
  projects: [],
  activeProject: null,
  testCycles: [], testExecutions: [], testCases: [],
+ testRuns: [],
+ activeTestRun: null,
  bugs: [],
  coverageMatrix: [],
  loading: false,
@@ -466,6 +477,87 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       set({ testExecutions: res.data });
     } catch (err) { console.error(err); }
+  },
+
+  fetchTestRuns: async (projectId: string) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/test-runs/project/${projectId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ testRuns: res.data.test_runs || [] });
+    } catch (err) {
+      console.error('Failed to fetch test runs', err);
+    }
+  },
+
+  startTestRun: async (projectId: string, name: string) => {
+    const { token } = get();
+    if (!token) return null;
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/test-runs`, { project_id: projectId, name }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await get().fetchTestRuns(projectId);
+      return res.data.test_run_id;
+    } catch (err) {
+      console.error('Failed to start test run', err);
+      return null;
+    }
+  },
+
+  fetchTestRunDetails: async (runId: string) => {
+    const { token } = get();
+    if (!token) return null;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/test-runs/${runId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ activeTestRun: res.data });
+      return res.data;
+    } catch (err) {
+      console.error('Failed to fetch test run details', err);
+      return null;
+    }
+  },
+
+  logTestCaseResult: async (runId: string, testCaseId: string, status: string, actualResult?: string, bugId?: string) => {
+    const { token } = get();
+    if (!token) return false;
+    try {
+      await axios.post(`${API_BASE_URL}/api/test-runs/${runId}/results`, {
+        test_case_id: testCaseId,
+        status,
+        actual_result: actualResult,
+        bug_id: bugId
+      }, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      await get().fetchTestRunDetails(runId);
+      return true;
+    } catch (err) {
+      console.error('Failed to log test case result', err);
+      return false;
+    }
+  },
+
+  completeTestRun: async (runId: string) => {
+    const { token } = get();
+    if (!token) return false;
+    try {
+      await axios.post(`${API_BASE_URL}/api/test-runs/${runId}/complete`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (get().activeProject) {
+        await get().fetchTestRuns(get().activeProject!.id);
+      }
+      await get().fetchTestRunDetails(runId);
+      return true;
+    } catch (err) {
+      console.error('Failed to complete test run', err);
+      return false;
+    }
   },
   getExecutionComments: async (execId: string) => {
     const { token } = get();

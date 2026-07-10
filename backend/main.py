@@ -307,6 +307,7 @@ app.add_middleware(
 
 # Register routers
 from backend.api import test_cases
+from backend.api import test_runs
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(upload.router)
@@ -319,6 +320,7 @@ app.include_router(sprints.router)
 app.include_router(releases.router)
 app.include_router(test_executions.router)
 app.include_router(test_cases.router)
+app.include_router(test_runs.router)
 app.include_router(pipelines.router)
 app.include_router(locator.router)
 
