@@ -10,19 +10,24 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 # ─── Helper: check if user can access a project (owner OR team member) ────────
 async def is_project_member(project_id: str, user_id: str) -> bool:
     """Returns True if user is the project owner OR a team member assigned to it."""
+    try:
+        p_uuid = uuid.UUID(project_id)
+        u_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return False
+        
     row = await db.fetchrow(
         """
-        SELECT p.id FROM projects p
-        WHERE p.id = $1 AND (
-            p.user_id = $2
+        SELECT id FROM projects 
+        WHERE id = $1 AND (
+            user_id = $2
             OR EXISTS (
-                SELECT 1 FROM project_teams pt
-                JOIN team_members tm ON pt.team_id = tm.team_id
-                WHERE pt.project_id = p.id AND tm.user_id = $2
+                SELECT 1 FROM project_members 
+                WHERE project_id = $1 AND user_id = $2
             )
         )
         """,
-        project_id, user_id
+        p_uuid, u_uuid
     )
     return row is not None
 
@@ -265,8 +270,9 @@ async def get_projects(current_user: dict = Depends(get_current_user)):
     """
     Returns all projects the current user can access:
     1. Projects they own (user_id = current user)
-    2. Projects assigned to a team they are a member of
+    2. Projects they are invited members of
     """
+    u_uuid = uuid.UUID(current_user["id"])
     rows = await db.fetch(
         """
         SELECT DISTINCT p.id, p.user_id, p.name, p.description, p.tech_stack, p.created_at, p.updated_at
@@ -274,13 +280,12 @@ async def get_projects(current_user: dict = Depends(get_current_user)):
         WHERE
             p.user_id = $1
             OR EXISTS (
-                SELECT 1 FROM project_teams pt
-                JOIN team_members tm ON pt.team_id = tm.team_id
-                WHERE pt.project_id = p.id AND tm.user_id = $1
+                SELECT 1 FROM project_members pm
+                WHERE pm.project_id = p.id AND pm.user_id = $1
             )
         ORDER BY p.name ASC
         """,
-        current_user["id"]
+        u_uuid
     )
     return [
         ProjectResponse(

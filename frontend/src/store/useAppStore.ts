@@ -256,6 +256,7 @@ interface AppState {
  activeBug: EnterpriseBug | null;
  bugDashboard: any | null;
  teams: Team[];
+ projectMembers: any[];
  notifications: AppNotification[];
  unreadNotificationCount: number;
 
@@ -331,6 +332,12 @@ interface AppState {
  assignTeamToProject: (teamId: string, projectId: string) => Promise<boolean>;
  getProjectTeams: (projectId: string) => Promise<any[]>;
 
+ // Project-scoped Team actions
+ fetchProjectMembers: (projectId: string) => Promise<void>;
+ addProjectMember: (projectId: string, email: string, role: string) => Promise<boolean>;
+ updateProjectMemberRole: (projectId: string, userId: string, role: string) => Promise<boolean>;
+ removeProjectMember: (projectId: string, userId: string) => Promise<boolean>;
+
  // Notification actions
  fetchNotifications: () => Promise<void>;
  markNotificationsRead: () => Promise<void>;
@@ -352,6 +359,7 @@ export const useAppStore = create<AppState>((set, get) => ({
  activeBug: null,
  bugDashboard: null,
  teams: [],
+ projectMembers: [],
  notifications: [],
   unreadNotificationCount: 0,
   theme: 'dark-monochrome',
@@ -1382,6 +1390,62 @@ export const useAppStore = create<AppState>((set, get) => ({
    return res.data.teams || [];
   } catch (err) {
    return [];
+  }
+ },
+
+ fetchProjectMembers: async (projectId) => {
+  const { token } = get();
+  if (!token) return;
+  try {
+   const res = await axios.get(`${API_BASE_URL}/api/teams/project/${projectId}/members`, {
+    headers: { Authorization: `Bearer ${token}` }
+   });
+   set({ projectMembers: res.data.members || [] });
+  } catch (err) {
+   console.error('Failed to fetch project members', err);
+   set({ projectMembers: [] });
+  }
+ },
+
+ addProjectMember: async (projectId, email, role) => {
+  const { token } = get();
+  if (!token) return false;
+  try {
+   await axios.post(`${API_BASE_URL}/api/teams/project/${projectId}/members`, { email, role }, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+   });
+   await get().fetchProjectMembers(projectId);
+   return true;
+  } catch (err) {
+   return false;
+  }
+ },
+
+ updateProjectMemberRole: async (projectId, userId, role) => {
+  const { token } = get();
+  if (!token) return false;
+  try {
+   await axios.put(`${API_BASE_URL}/api/teams/project/${projectId}/members/${userId}`, { role }, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+   });
+   await get().fetchProjectMembers(projectId);
+   return true;
+  } catch (err) {
+   return false;
+  }
+ },
+
+ removeProjectMember: async (projectId, userId) => {
+  const { token } = get();
+  if (!token) return false;
+  try {
+   await axios.delete(`${API_BASE_URL}/api/teams/project/${projectId}/members/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+   });
+   await get().fetchProjectMembers(projectId);
+   return true;
+  } catch (err) {
+   return false;
   }
  },
 

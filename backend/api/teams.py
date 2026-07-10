@@ -1,358 +1,241 @@
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
+from pydantic import BaseModel
 
 from backend.database import db
 from backend.api.auth import get_current_user
-from backend.models.schemas import TeamCreate, TeamUpdate, TeamMemberAdd, TeamProjectAssign
 
 router = APIRouter(prefix="/api/teams", tags=["Teams"])
 logger = logging.getLogger(__name__)
 
+# ─── Pydantic Schemas for Local Validation ───────────────────────
+class ProjectMemberAdd(BaseModel):
+    email: str
+    role: str = "QA_ENGINEER" # 'ADMIN', 'QA_LEAD', 'QA_ENGINEER', 'DEVELOPER'
 
-# ─────────────────────────────────────────────
-# LIST TEAMS
-# ─────────────────────────────────────────────
-@router.get("", response_model=dict)
-async def list_teams(current_user: dict = Depends(get_current_user)):
-    """List all teams the current user belongs to or created."""
-    rows = await db.fetch(
+class ProjectMemberUpdate(BaseModel):
+    role: str
+
+# ─── Helper: Check Admin/Owner Permissions ───────────────────────
+async def check_project_admin(project_id: str, user_id: str) -> bool:
+    try:
+        p_uuid = uuid.UUID(project_id)
+        u_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return False
+        
+    # Check if user is the owner of the project
+    owner = await db.fetchval("SELECT user_id FROM projects WHERE id = $1", p_uuid)
+    if owner and owner == u_uuid:
+        return True
+        
+    # Check if user has an ADMIN or QA_LEAD role in the project_members table
+    member_role = await db.fetchval(
+        "SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2",
+        p_uuid, u_uuid
+    )
+    if member_role in ["ADMIN", "QA_LEAD"]:
+        return True
+        
+    return False
+
+# ─────────────────────────────────────────────────────────────
+# 1. LIST PROJECT MEMBERS
+# ─────────────────────────────────────────────────────────────
+@router.get("/project/{project_id}/members", response_model=dict)
+async def list_project_members(project_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        p_uuid = uuid.UUID(project_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID format.")
+
+    # Check if current user is owner or member of this project
+    is_owner = await db.fetchval("SELECT id FROM projects WHERE id = $1 AND user_id = $2", p_uuid, uuid.UUID(current_user["id"]))
+    is_member = await db.fetchval("SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2", p_uuid, uuid.UUID(current_user["id"]))
+    
+    if not is_owner and not is_member:
+        raise HTTPException(status_code=403, detail="You do not have access to this project.")
+
+    # Fetch owner details
+    owner_row = await db.fetchrow(
         """
-        SELECT t.id, t.name, t.description, t.team_type, t.created_by, t.created_at,
-               COUNT(tm.user_id) as member_count
-        FROM teams t
-        LEFT JOIN team_members tm ON t.id = tm.team_id
-        WHERE t.created_by = $1 OR tm.user_id = $1
-        GROUP BY t.id
-        ORDER BY t.created_at DESC
+        SELECT u.id, u.name, u.email, u.role as platform_role
+        FROM projects p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.id = $1
         """,
-        current_user["id"]
+        p_uuid
     )
-    teams = []
-    for row in rows:
-        team_dict = dict(row)
-        team_dict["id"] = str(team_dict["id"])
-        team_dict["created_by"] = str(team_dict["created_by"])
-        team_dict["member_count"] = int(team_dict.get("member_count", 0))
-        teams.append(team_dict)
-    return {"teams": teams}
-
-
-# ─────────────────────────────────────────────
-# CREATE TEAM
-# ─────────────────────────────────────────────
-@router.post("", response_model=dict)
-async def create_team(request: TeamCreate, current_user: dict = Depends(get_current_user)):
-    row = await db.fetchrow(
+    
+    # Fetch members details
+    member_rows = await db.fetch(
         """
-        INSERT INTO teams (name, description, team_type, created_by)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, name, description, team_type, created_by, created_at
+        SELECT u.id, u.name, u.email, pm.role, pm.joined_at
+        FROM project_members pm
+        JOIN users u ON pm.user_id = u.id
+        WHERE pm.project_id = $1
+        ORDER BY pm.joined_at ASC
         """,
-        request.name, request.description, request.team_type, current_user["id"]
-    )
-    if not row:
-        raise HTTPException(status_code=500, detail="Failed to create team")
-
-    # Auto-add creator as member
-    await db.execute(
-        "INSERT INTO team_members (team_id, user_id, role_in_team) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-        str(row["id"]), current_user["id"], current_user.get("role", "QA_LEAD")
+        p_uuid
     )
 
-    return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "description": row["description"],
-        "team_type": row["team_type"],
-        "created_by": str(row["created_by"]),
-        "created_at": row["created_at"].isoformat()
-    }
+    members_list = []
+    # Add owner as first member (ADMIN/Owner role)
+    if owner_row:
+        members_list.append({
+            "id": str(owner_row["id"]),
+            "name": owner_row["name"],
+            "email": owner_row["email"],
+            "role": "OWNER",
+            "joined_at": None
+        })
 
+    for m in member_rows:
+        members_list.append({
+            "id": str(m["id"]),
+            "name": m["name"],
+            "email": m["email"],
+            "role": m["role"],
+            "joined_at": m["joined_at"].isoformat() if m["joined_at"] else None
+        })
 
-# ─────────────────────────────────────────────
-# GET SINGLE TEAM
-# ─────────────────────────────────────────────
-@router.get("/{team_id}", response_model=dict)
-async def get_team(team_id: str, current_user: dict = Depends(get_current_user)):
-    row = await db.fetchrow(
-        """
-        SELECT t.id, t.name, t.description, t.team_type, t.created_by, t.created_at
-        FROM teams t
-        WHERE t.id = $1
-        """,
-        team_id
+    return {"members": members_list}
+
+# ─────────────────────────────────────────────────────────────
+# 2. ADD / INVITE MEMBER TO PROJECT
+# ─────────────────────────────────────────────────────────────
+@router.post("/project/{project_id}/members", response_model=dict)
+async def add_project_member(project_id: str, request: ProjectMemberAdd, current_user: dict = Depends(get_current_user)):
+    # Verify permission
+    has_permission = await check_project_admin(project_id, current_user["id"])
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Only project owners or administrators can invite team members.")
+
+    try:
+        p_uuid = uuid.UUID(project_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID format.")
+
+    # Find user by email
+    invited_user = await db.fetchrow(
+        "SELECT id, name, email FROM users WHERE LOWER(email) = LOWER($1)",
+        request.email.strip()
     )
-    if not row:
-        raise HTTPException(status_code=404, detail="Team not found")
+    if not invited_user:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"User with email '{request.email}' is not registered on the platform."
+        )
 
-    # Get members
-    members = await db.fetch(
-        """
-        SELECT u.id, u.name, u.email, u.role, tm.role_in_team, tm.joined_at
-        FROM team_members tm
-        JOIN users u ON tm.user_id = u.id
-        WHERE tm.team_id = $1
-        ORDER BY tm.joined_at ASC
-        """,
-        team_id
-    )
+    # Check if they are already the owner of the project
+    is_owner = await db.fetchval("SELECT id FROM projects WHERE id = $1 AND user_id = $2", p_uuid, invited_user["id"])
+    if is_owner:
+        raise HTTPException(status_code=400, detail="This user is already the owner of the project.")
 
-    # Get linked projects
-    projects = await db.fetch(
-        """
-        SELECT p.id, p.name, p.description
-        FROM project_teams pt
-        JOIN projects p ON pt.project_id = p.id
-        WHERE pt.team_id = $1
-        """,
-        team_id
-    )
-
-    return {
-        "id": str(row["id"]),
-        "name": row["name"],
-        "description": row["description"],
-        "team_type": row["team_type"],
-        "created_by": str(row["created_by"]),
-        "created_at": row["created_at"].isoformat(),
-        "members": [
-            {
-                "id": str(m["id"]),
-                "name": m["name"],
-                "email": m["email"],
-                "role": m["role"],
-                "role_in_team": m["role_in_team"],
-                "joined_at": m["joined_at"].isoformat() if m["joined_at"] else None
-            }
-            for m in members
-        ],
-        "projects": [
-            {"id": str(p["id"]), "name": p["name"], "description": p["description"]}
-            for p in projects
-        ]
-    }
-
-
-# ─────────────────────────────────────────────
-# UPDATE TEAM
-# ─────────────────────────────────────────────
-@router.put("/{team_id}", response_model=dict)
-async def update_team(team_id: str, request: TeamUpdate, current_user: dict = Depends(get_current_user)):
-    team = await db.fetchrow(
-        "SELECT id, created_by FROM teams WHERE id = $1",
-        team_id
-    )
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-    if str(team["created_by"]) != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Only the team creator can edit this team")
-
-    updates = []
-    params = []
-    idx = 1
-    if request.name is not None:
-        updates.append(f"name = ${idx}"); params.append(request.name); idx += 1
-    if request.description is not None:
-        updates.append(f"description = ${idx}"); params.append(request.description); idx += 1
-    if request.team_type is not None:
-        updates.append(f"team_type = ${idx}"); params.append(request.team_type); idx += 1
-
-    if not updates:
-        return {"success": True, "message": "No changes"}
-
-    params.append(team_id)
-    await db.execute(
-        f"UPDATE teams SET {', '.join(updates)}, updated_at = NOW() WHERE id = ${idx}",
-        *params
-    )
-    return {"success": True, "message": "Team updated"}
-
-
-# ─────────────────────────────────────────────
-# DELETE TEAM
-# ─────────────────────────────────────────────
-@router.delete("/{team_id}", response_model=dict)
-async def delete_team(team_id: str, current_user: dict = Depends(get_current_user)):
-    team = await db.fetchrow(
-        "SELECT id, created_by FROM teams WHERE id = $1",
-        team_id
-    )
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-    if str(team["created_by"]) != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Only the team creator can delete this team")
-
-    await db.execute("DELETE FROM teams WHERE id = $1", team_id)
-    return {"success": True, "message": "Team deleted"}
-
-
-# ─────────────────────────────────────────────
-# LIST TEAM MEMBERS
-# ─────────────────────────────────────────────
-@router.get("/{team_id}/members", response_model=dict)
-async def list_team_members(team_id: str, current_user: dict = Depends(get_current_user)):
-    members = await db.fetch(
-        """
-        SELECT u.id, u.name, u.email, u.role, tm.role_in_team, tm.joined_at
-        FROM team_members tm
-        JOIN users u ON tm.user_id = u.id
-        WHERE tm.team_id = $1
-        ORDER BY tm.joined_at ASC
-        """,
-        team_id
-    )
-    return {
-        "members": [
-            {
-                "id": str(m["id"]),
-                "name": m["name"],
-                "email": m["email"],
-                "role": m["role"],
-                "role_in_team": m["role_in_team"],
-                "joined_at": m["joined_at"].isoformat() if m["joined_at"] else None
-            }
-            for m in members
-        ]
-    }
-
-
-# ─────────────────────────────────────────────
-# ADD MEMBER TO TEAM
-# ─────────────────────────────────────────────
-@router.post("/{team_id}/members", response_model=dict)
-async def add_team_member(team_id: str, request: TeamMemberAdd, current_user: dict = Depends(get_current_user)):
-    team = await db.fetchrow("SELECT id FROM teams WHERE id = $1", team_id)
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-
-    # Verify user exists
-    user = await db.fetchrow("SELECT id, name, email, role FROM users WHERE id = $1", request.user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    # Insert or update role in project_members
     await db.execute(
         """
-        INSERT INTO team_members (team_id, user_id, role_in_team)
+        INSERT INTO project_members (project_id, user_id, role)
         VALUES ($1, $2, $3)
-        ON CONFLICT (team_id, user_id) DO UPDATE SET role_in_team = EXCLUDED.role_in_team
+        ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role
         """,
-        team_id, request.user_id, request.role_in_team or user["role"]
+        p_uuid, invited_user["id"], request.role
     )
+
     return {
         "success": True,
+        "message": f"Successfully invited {invited_user['name']} to the project.",
         "member": {
-            "id": str(user["id"]),
-            "name": user["name"],
-            "email": user["email"],
-            "role": user["role"],
-            "role_in_team": request.role_in_team or user["role"]
+            "id": str(invited_user["id"]),
+            "name": invited_user["name"],
+            "email": invited_user["email"],
+            "role": request.role
         }
     }
 
+# ─────────────────────────────────────────────────────────────
+# 3. UPDATE MEMBER ROLE
+# ─────────────────────────────────────────────────────────────
+@router.put("/project/{project_id}/members/{user_id}", response_model=dict)
+async def update_project_member_role(project_id: str, user_id: str, request: ProjectMemberUpdate, current_user: dict = Depends(get_current_user)):
+    # Verify permission
+    has_permission = await check_project_admin(project_id, current_user["id"])
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Only project owners or administrators can edit team member roles.")
 
-# ─────────────────────────────────────────────
-# REMOVE MEMBER FROM TEAM
-# ─────────────────────────────────────────────
-@router.delete("/{team_id}/members/{user_id}", response_model=dict)
-async def remove_team_member(team_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
-    team = await db.fetchrow(
-        "SELECT id, created_by FROM teams WHERE id = $1",
-        team_id
+    try:
+        p_uuid = uuid.UUID(project_id)
+        u_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID formats.")
+
+    # Check if user is a member
+    member = await db.fetchrow(
+        "SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2",
+        p_uuid, u_uuid
     )
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-    if str(team["created_by"]) != current_user["id"] and user_id != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Only the team creator can remove members")
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found in this project.")
 
+    # Update role
     await db.execute(
-        "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2",
-        team_id, user_id
+        "UPDATE project_members SET role = $1 WHERE project_id = $2 AND user_id = $3",
+        request.role, p_uuid, u_uuid
     )
-    return {"success": True, "message": "Member removed from team"}
 
+    return {"success": True, "message": "Member role updated successfully."}
 
-# ─────────────────────────────────────────────
-# ASSIGN TEAM TO PROJECT
-# ─────────────────────────────────────────────
-@router.post("/{team_id}/projects", response_model=dict)
-async def assign_team_to_project(team_id: str, request: TeamProjectAssign, current_user: dict = Depends(get_current_user)):
-    # Verify project ownership
-    project = await db.fetchrow(
-        "SELECT id FROM projects WHERE id = $1 AND user_id = $2",
-        request.project_id, current_user["id"]
+# ─────────────────────────────────────────────────────────────
+# 4. REMOVE MEMBER FROM PROJECT
+# ─────────────────────────────────────────────────────────────
+@router.delete("/project/{project_id}/members/{user_id}", response_model=dict)
+async def remove_project_member(project_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
+    # Verify permission (A user can also remove themselves from a project)
+    has_permission = await check_project_admin(project_id, current_user["id"])
+    is_self = current_user["id"] == user_id
+    
+    if not has_permission and not is_self:
+        raise HTTPException(status_code=403, detail="Only project owners, administrators, or the users themselves can remove members.")
+
+    try:
+        p_uuid = uuid.UUID(project_id)
+        u_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID formats.")
+
+    # Check if user is a member
+    member = await db.fetchrow(
+        "SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2",
+        p_uuid, u_uuid
     )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found or unauthorized")
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found in this project.")
 
-    team = await db.fetchrow("SELECT id FROM teams WHERE id = $1", team_id)
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
-
+    # Delete membership
     await db.execute(
-        """
-        INSERT INTO project_teams (project_id, team_id)
-        VALUES ($1, $2)
-        ON CONFLICT (project_id, team_id) DO NOTHING
-        """,
-        request.project_id, team_id
+        "DELETE FROM project_members WHERE project_id = $1 AND user_id = $2",
+        p_uuid, u_uuid
     )
-    return {"success": True, "message": "Team assigned to project"}
 
+    return {"success": True, "message": "Member successfully removed from project."}
 
-# ─────────────────────────────────────────────
-# GET TEAMS FOR A PROJECT
-# ─────────────────────────────────────────────
-@router.get("/project/{project_id}", response_model=dict)
-async def get_project_teams(project_id: str, current_user: dict = Depends(get_current_user)):
-    project = await db.fetchrow(
-        "SELECT id FROM projects WHERE id = $1 AND user_id = $2",
-        project_id, current_user["id"]
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found or unauthorized")
-
-    rows = await db.fetch(
-        """
-        SELECT t.id, t.name, t.description, t.team_type,
-               COUNT(tm.user_id) as member_count
-        FROM project_teams pt
-        JOIN teams t ON pt.team_id = t.id
-        LEFT JOIN team_members tm ON t.id = tm.team_id
-        WHERE pt.project_id = $1
-        GROUP BY t.id
-        """,
-        project_id
-    )
-    return {
-        "teams": [
-            {
-                "id": str(r["id"]),
-                "name": r["name"],
-                "description": r["description"],
-                "team_type": r["team_type"],
-                "member_count": int(r.get("member_count", 0))
-            }
-            for r in rows
-        ]
-    }
-
-
-# ─────────────────────────────────────────────
-# SEARCH USERS (to add to team)
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# 5. SEARCH USERS
+# ─────────────────────────────────────────────────────────────
 @router.get("/users/search", response_model=dict)
 async def search_users(q: str = "", current_user: dict = Depends(get_current_user)):
-    """Search platform users by email or name for adding to a team."""
+    """Search users by name or email to invite them to projects."""
     rows = await db.fetch(
         """
         SELECT id, name, email, role
         FROM users
         WHERE (LOWER(name) LIKE LOWER($1) OR LOWER(email) LIKE LOWER($1))
         AND id != $2
-        LIMIT 20
+        LIMIT 10
         """,
-        f"%{q}%", current_user["id"]
+        f"%{q}%", uuid.UUID(current_user["id"])
     )
     return {
         "users": [
