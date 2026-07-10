@@ -234,15 +234,15 @@ export default function TestExecutionPage() {
               </div>
               <div className="w-full max-w-xs mt-2">
                 <select
-                  value={activeProject?.id || ''}
+                  value=""
                   onChange={(e) => {
-                    const proj = projects.find(p => p.id === e.target.value);
+                    const proj = (projects as any[]).find((p: any) => p.id === e.target.value);
                     if (proj) setActiveProject(proj);
                   }}
                   className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-[#c9d1d9] focus:outline-none focus:border-blue-500"
                 >
                   <option value="" disabled>Choose a project...</option>
-                  {projects.map((p) => (
+                  {(projects as any[]).map((p: any) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>

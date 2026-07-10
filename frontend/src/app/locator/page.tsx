@@ -19,11 +19,29 @@ import {
   Send,
   FileCode,
   Check,
-  Github,
   ExternalLink,
   PlayCircle,
-  FolderGit
+  FolderGit,
+  X,
+  GitBranch
 } from 'lucide-react';
+
+// Custom inline SVG icons for guaranteed package compatibility
+const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+  </svg>
+);
+
+const GitPullRequestIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+    <circle cx="18" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M18 15V9a4 4 0 0 0-4-4H9" />
+    <line x1="6" y1="9" x2="6" y2="15" stroke="currentColor" />
+  </svg>
+);
 
 interface DOMElement {
   tag: string;
@@ -511,7 +529,7 @@ export default function LocatorXPage() {
                               onClick={handlePushToGithub}
                               className="text-blue-500 hover:text-blue-400 flex items-center gap-1.5 transition text-[11px] font-bold border-l border-slate-700 pl-3"
                             >
-                              <Github className="w-3.5 h-3.5" />
+                              <GithubIcon className="w-3.5 h-3.5" />
                               Push to GitHub
                             </button>
                           )}
@@ -668,7 +686,7 @@ export default function LocatorXPage() {
                               onClick={handlePushToGithub}
                               className="text-blue-500 hover:text-blue-400 flex items-center gap-1.5 transition text-[11px] font-bold border-l border-slate-700 pl-3"
                             >
-                              <Github className="w-3.5 h-3.5" />
+                              <GithubIcon className="w-3.5 h-3.5" />
                               Push to GitHub
                             </button>
                           )}
@@ -734,7 +752,7 @@ export default function LocatorXPage() {
           >
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-bold text-white flex items-center gap-1.5">
-                <Github className="w-5 h-5 text-blue-500" />
+                <GithubIcon className="w-5 h-5 text-blue-500" />
                 Push Script & Open PR
               </h2>
               <button
@@ -748,7 +766,7 @@ export default function LocatorXPage() {
 
             {gitStatusMsg && (
               <div className="mb-4 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 p-3 rounded-lg text-xs flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 {gitStatusMsg}
               </div>
             )}
@@ -814,7 +832,7 @@ export default function LocatorXPage() {
                   </>
                 ) : (
                   <>
-                    <GitPullRequest className="w-3.5 h-3.5" />
+                    <GitPullRequestIcon className="w-3.5 h-3.5" />
                     Push & Open PR
                   </>
                 )}
