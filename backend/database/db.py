@@ -28,7 +28,8 @@ async def get_db_pool():
                 min_size=2,
                 max_size=10,
                 max_queries=50000,
-                timeout=30.0
+                timeout=30.0,
+                statement_cache_size=0
             )
             logger.info("Database connection pool established successfully.")
         except Exception as e:
