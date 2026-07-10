@@ -207,16 +207,56 @@ async def lifespan(app: FastAPI):
             );
         """)
 
+        # Test Cycles
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS test_cycles (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                release_id UUID REFERENCES releases(id) ON DELETE SET NULL,
+                sprint_id UUID REFERENCES sprints(id) ON DELETE SET NULL,
+                environment VARCHAR(100) NOT NULL,
+                start_date TIMESTAMP WITH TIME ZONE,
+                end_date TIMESTAMP WITH TIME ZONE,
+                status VARCHAR(50) DEFAULT 'ACTIVE',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
         # Test Executions
         await db.execute("""
             CREATE TABLE IF NOT EXISTS test_executions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                 test_case_id UUID REFERENCES test_cases(id) ON DELETE CASCADE,
+                test_cycle_id UUID REFERENCES test_cycles(id) ON DELETE CASCADE,
                 suite_name VARCHAR(255) DEFAULT 'Regression',
                 status VARCHAR(50) DEFAULT 'NOT_EXECUTED',
+                comments TEXT,
+                execution_time_ms INTEGER,
+                attachment_url VARCHAR(512),
                 executed_by UUID REFERENCES users(id) ON DELETE SET NULL,
                 executed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Safe migrations for existing databases:
+        await db.execute("""
+            ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS test_cycle_id UUID REFERENCES test_cycles(id) ON DELETE CASCADE;
+            ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS comments TEXT;
+            ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS execution_time_ms INTEGER;
+            ALTER TABLE test_executions ADD COLUMN IF NOT EXISTS attachment_url VARCHAR(512);
+        """)
+
+        # Execution Comments
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS execution_comments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                execution_id UUID NOT NULL REFERENCES test_executions(id) ON DELETE CASCADE,
+                author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                content TEXT NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
