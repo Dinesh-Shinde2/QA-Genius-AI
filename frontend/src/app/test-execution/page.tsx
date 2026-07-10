@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 const SEVERITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-const PRIORITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH'];
+const PRIORITY_OPTIONS = ['P1', 'P2', 'P3'];
 
 export default function TestExecutionPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function TestExecutionPage() {
   const [showBugModal, setShowBugModal] = useState(false);
   const [bugTitle, setBugTitle] = useState('');
   const [bugSeverity, setBugSeverity] = useState('HIGH');
-  const [bugPriority, setBugPriority] = useState('HIGH');
+  const [bugPriority, setBugPriority] = useState('P2');
   const [bugEnvironment, setBugEnvironment] = useState('QA');
   const [bugBuildVersion, setBugBuildVersion] = useState('1.0.0');
 
@@ -625,7 +625,7 @@ export default function TestExecutionPage() {
                   required
                   value={bugTitle}
                   onChange={(e) => setBugTitle(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-[#ffffff] focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -635,7 +635,7 @@ export default function TestExecutionPage() {
                   <select
                     value={bugSeverity}
                     onChange={(e) => setBugSeverity(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#ffffff] focus:outline-none focus:border-blue-500"
                   >
                     {SEVERITY_OPTIONS.map((o) => (
                       <option key={o} value={o}>{o}</option>
@@ -648,7 +648,7 @@ export default function TestExecutionPage() {
                   <select
                     value={bugPriority}
                     onChange={(e) => setBugPriority(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#ffffff] focus:outline-none focus:border-blue-500"
                   >
                     {PRIORITY_OPTIONS.map((o) => (
                       <option key={o} value={o}>{o}</option>
@@ -663,7 +663,7 @@ export default function TestExecutionPage() {
                     required
                     value={bugEnvironment}
                     onChange={(e) => setBugEnvironment(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#ffffff] focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -674,7 +674,7 @@ export default function TestExecutionPage() {
                     required
                     value={bugBuildVersion}
                     onChange={(e) => setBugBuildVersion(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#ffffff] focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
