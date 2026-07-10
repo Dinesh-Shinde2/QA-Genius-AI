@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
         # ── Legacy migrations ──────────────────────────────────────────────
         await db.execute("ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DONE';")
         await db.execute("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DONE';")
+        await db.execute("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS title VARCHAR(255) DEFAULT '';")
+        await db.execute("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';")
+        await db.execute("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS attachments TEXT[] DEFAULT '{}';")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS integration_settings (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
