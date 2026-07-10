@@ -221,6 +221,53 @@ async def lifespan(app: FastAPI):
             );
         """)
 
+        # ── SaaS Expansion Modules: Project Members, Test Runs, GitHub OAuth ──
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS project_members (
+                project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role VARCHAR(50) DEFAULT 'QA_ENGINEER',
+                joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (project_id, user_id)
+            );
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_github_tokens (
+                user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                access_token VARCHAR(512) NOT NULL,
+                github_username VARCHAR(255),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS test_runs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                status VARCHAR(50) DEFAULT 'IN_PROGRESS',
+                created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP WITH TIME ZONE
+            );
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS test_run_results (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                test_run_id UUID NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+                test_case_id UUID NOT NULL REFERENCES test_cases(id) ON DELETE CASCADE,
+                status VARCHAR(50) NOT NULL,
+                actual_result TEXT,
+                bug_id UUID REFERENCES enterprise_bugs(id) ON DELETE SET NULL,
+                executed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                executed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(test_run_id, test_case_id)
+            );
+        """)
+
         # Performance indices
         await db.execute("CREATE INDEX IF NOT EXISTS idx_ebug_project ON enterprise_bugs(project_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_ebug_status ON enterprise_bugs(project_id, status);")
@@ -230,8 +277,10 @@ async def lifespan(app: FastAPI):
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sprints_project ON sprints(project_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_releases_project ON releases(project_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_test_executions_project ON test_executions(project_id);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_test_runs_project ON test_runs(project_id);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_test_run_results_run ON test_run_results(test_run_id);")
 
-        logger.info("Enterprise Bug Module & Advanced QA Modules: All tables and indices created/verified successfully.")
+        logger.info("Enterprise Bug & SaaS Modules: All tables and indices created/verified successfully.")
 
     except Exception as e:
         logger.error(f"Failed to initialize database during startup: {e}")

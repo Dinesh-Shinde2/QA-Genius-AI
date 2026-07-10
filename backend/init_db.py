@@ -24,11 +24,13 @@ async def main():
     print("Step 2: Connecting to Supabase pool...")
     pool = await get_db_pool()
     
-    print("Step 3: Running base schema.sql...")
+    print("Step 3: Running base schema.sql (skipping if already initialized)...")
     async with pool.acquire() as conn:
-        async with conn.transaction():
+        try:
             await conn.execute(schema_sql)
-    print("Base schema.sql executed successfully.")
+            print("Base schema.sql executed successfully.")
+        except Exception as e:
+            print(f"Info: Base schema skipped or already initialized: {e}")
 
     print("Step 4: Running application-level migrations from main.py...")
     # Use the context manager to run startup migrations and automatically close pool on exit
