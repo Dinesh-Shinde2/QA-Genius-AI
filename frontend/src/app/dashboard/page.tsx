@@ -53,7 +53,9 @@ export default function Dashboard() {
   coverageMatrix, 
   projects,
   loading,
-  theme 
+  theme,
+  testRuns,
+  fetchTestRuns
  } = useAppStore();
 
  const [mounted, setMounted] = useState(false);
@@ -62,6 +64,12 @@ export default function Dashboard() {
    'totalProjects', 'openBugs', 'testCases', 'bugsIdentified', 'testExecution',
    'executionChart', 'severityChart'
  ]);
+
+ useEffect(() => {
+   if (activeProject && token) {
+     fetchTestRuns(activeProject.id);
+   }
+ }, [activeProject, token, fetchTestRuns]);
 
  useEffect(() => {
   setMounted(true);
@@ -87,28 +95,45 @@ export default function Dashboard() {
  if (!mounted || !token) return null;
 
  // Compute coverage score (percentage of requirements with at least 1 test case)
- const totalReqs = coverageMatrix.length;
- const coveredReqs = coverageMatrix.filter(c => c.test_case_count > 0).length;
- const coveragePercent = totalReqs > 0 ? Math.round((coveredReqs / totalReqs) * 100) : 0;
+  const totalReqs = coverageMatrix.length;
+  const coveredReqs = coverageMatrix.filter(c => c.test_case_count > 0).length;
+  const coveragePercent = totalReqs > 0 ? Math.round((coveredReqs / totalReqs) * 100) : 0;
 
- // Chart 1: Module-wise test case distribution
- const moduleDataMap: Record<string, number> = {};
- testCases.forEach(tc => {
-  moduleDataMap[tc.module] = (moduleDataMap[tc.module] || 0) + 1;
- });
- 
- // Make sure template modules are shown even if 0 test cases
- coverageMatrix.forEach(item => {
-  if (!(item.module in moduleDataMap)) {
-   moduleDataMap[item.module] = 0;
-  }
- });
+  // Calculate live test execution success rate
+  let totalExecuted = 0;
+  let totalPassed = 0;
+  testRuns.forEach(run => {
+    totalExecuted += Number(run.executed_cases || 0);
+    totalPassed += Number(run.passed_cases || 0);
+  });
+  const executionSuccessRate = totalExecuted > 0 ? `${Math.round((totalPassed / totalExecuted) * 100)}%` : '0%';
 
- const moduleChartData = Object.keys(moduleDataMap).map(m => ({
-  name: m,
-  "Test Cases": moduleDataMap[m],
-  "Coverage %": coverageMatrix.find(c => c.module === m)?.status === "COVERED" ? 100 : 0
- }));
+  // Chart 1: Module-wise test case distribution & Bug count
+  const moduleDataMap: Record<string, number> = {};
+  const moduleBugMap: Record<string, number> = {};
+
+  testCases.forEach(tc => {
+    moduleDataMap[tc.module] = (moduleDataMap[tc.module] || 0) + 1;
+  });
+  
+  bugs.forEach(bug => {
+    if (bug.module) {
+      moduleBugMap[bug.module] = (moduleBugMap[bug.module] || 0) + 1;
+    }
+  });
+  
+  // Make sure template modules are shown even if 0 test cases
+  coverageMatrix.forEach(item => {
+    if (!(item.module in moduleDataMap)) {
+      moduleDataMap[item.module] = 0;
+    }
+  });
+
+  const moduleChartData = Object.keys(moduleDataMap).map(m => ({
+    name: m,
+    "Test Cases": moduleDataMap[m],
+    "Bugs": moduleBugMap[m] || 0
+  }));
 
  // Chart 2: Bug Severity distribution
  const severityCount: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
@@ -184,7 +209,7 @@ export default function Dashboard() {
    { id: 'openBugs', name: 'Open Bugs', value: bugs.filter(b => b.status === 'OPEN').length, icon: FileSpreadsheet, color: 'text-foreground' },
    { id: 'testCases', name: 'Test Cases', value: testCases.length, icon: BadgeCheck, color: 'text-foreground' },
    { id: 'bugsIdentified', name: 'Bugs Identified', value: bugs.length, icon: Bug, color: 'text-foreground' },
-   { id: 'testExecution', name: 'Test Execution', value: '82%', icon: TrendingUp, color: 'text-foreground' },
+   { id: 'testExecution', name: 'Test Execution Success', value: executionSuccessRate, icon: TrendingUp, color: 'text-foreground' },
   ];
 
   const activeStatCards = statCards.filter(c => visibleWidgets.includes(c.id));
@@ -269,7 +294,9 @@ export default function Dashboard() {
                contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '12px', color: tooltipTextColor }}
                labelStyle={{ color: tooltipTextColor, fontWeight: 'bold' }}
               />
+              <Legend verticalAlign="top" height={36} iconType="circle" formatter={(value) => <span className="text-[10px] font-bold text-foreground/60">{value}</span>} />
               <Bar dataKey="Test Cases" fill={barColor} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Bugs" fill="#f43f5e" radius={[4, 4, 0, 0]} />
              </BarChart>
             </ResponsiveContainer>
            ) : (
