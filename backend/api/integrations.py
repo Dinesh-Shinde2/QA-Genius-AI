@@ -252,3 +252,240 @@ async def sync_testcase_to_ado(case_id: str, current_user: dict = Depends(get_cu
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=f"Failed to reach Azure DevOps Server: {str(e)}"
         )
+
+# ──────────────────────────────────────────────────────────────────────
+# GITHUB INTEGRATION ENDPOINTS
+# ──────────────────────────────────────────────────────────────────────
+class GithubTokenRequest(BaseModel):
+    token: str
+
+class GithubRepoRequest(BaseModel):
+    project_id: str
+    repo_name: str # e.g. "owner/repo"
+
+class GithubPrPushRequest(BaseModel):
+    project_id: str
+    test_case_id: str
+    code_content: str
+    file_path: str = "tests/automation.spec.js"
+
+@router.get("/github/status", response_model=dict)
+async def get_github_status(current_user: dict = Depends(get_current_user)):
+    row = await db.fetchrow(
+        "SELECT github_username FROM user_github_tokens WHERE user_id = $1",
+        uuid.UUID(current_user["id"])
+    )
+    if not row:
+        return {"connected": False}
+    return {"connected": True, "github_username": row["github_username"]}
+
+@router.post("/github/token", response_model=dict)
+async def save_github_token(request: GithubTokenRequest, current_user: dict = Depends(get_current_user)):
+    # Validate token with GitHub API and get username
+    headers = {
+        "Authorization": f"token {request.token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get("https://api.github.com/user", headers=headers, timeout=10.0)
+            if res.status_code != 200:
+                raise HTTPException(status_code=400, detail="Invalid GitHub Token provided.")
+            user_data = res.json()
+            username = user_data.get("login")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to connect to GitHub API: {str(e)}")
+
+    await db.execute(
+        """
+        INSERT INTO user_github_tokens (user_id, access_token, github_username, updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (user_id) 
+        DO UPDATE SET access_token = EXCLUDED.access_token, github_username = EXCLUDED.github_username, updated_at = NOW()
+        """,
+        uuid.UUID(current_user["id"]), request.token.strip(), username
+    )
+
+    return {"success": True, "github_username": username, "message": "GitHub account linked successfully"}
+
+@router.delete("/github", response_model=dict)
+async def disconnect_github(current_user: dict = Depends(get_current_user)):
+    await db.execute(
+        "DELETE FROM user_github_tokens WHERE user_id = $1",
+        uuid.UUID(current_user["id"])
+    )
+    return {"success": True, "message": "GitHub account disconnected"}
+
+@router.post("/github/project-repo", response_model=dict)
+async def save_project_github_repo(request: GithubRepoRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        p_uuid = uuid.UUID(request.project_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID format.")
+
+    # Check project ownership/access
+    project = await db.fetchrow("SELECT id FROM projects WHERE id = $1 AND user_id = $2", p_uuid, uuid.UUID(current_user["id"]))
+    if not project:
+        raise HTTPException(status_code=403, detail="You do not have administrative access to this project.")
+
+    parts = request.repo_name.strip().split('/')
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Repository name must be in the format 'owner/repo'.")
+
+    owner, repo = parts[0], parts[1]
+
+    await db.execute(
+        """
+        INSERT INTO integration_settings (project_id, provider, org_name, project_name)
+        VALUES ($1, 'GITHUB', $2, $3)
+        ON CONFLICT (project_id, provider)
+        DO UPDATE SET org_name = EXCLUDED.org_name, project_name = EXCLUDED.project_name
+        """,
+        p_uuid, owner, repo
+    )
+
+    return {"success": True, "message": f"Project mapped to GitHub repository '{request.repo_name}' successfully."}
+
+@router.get("/github/project-repo", response_model=dict)
+async def get_project_github_repo(project_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        p_uuid = uuid.UUID(project_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID format.")
+
+    row = await db.fetchrow(
+        "SELECT org_name, project_name FROM integration_settings WHERE project_id = $1 AND provider = 'GITHUB'",
+        p_uuid
+    )
+    if not row:
+        return {"configured": False, "repo_name": ""}
+    return {"configured": True, "repo_name": f"{row['org_name']}/{row['project_name']}"}
+
+@router.post("/github/push-pr", response_model=dict)
+async def push_playwright_pr(request: GithubPrPushRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        p_uuid = uuid.UUID(request.project_id)
+        tc_uuid = uuid.UUID(request.test_case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID formats.")
+
+    # 1. Get user GitHub token
+    token_row = await db.fetchrow(
+        "SELECT access_token FROM user_github_tokens WHERE user_id = $1",
+        uuid.UUID(current_user["id"])
+    )
+    if not token_row:
+        raise HTTPException(status_code=400, detail="You must link your GitHub account under settings first.")
+    token = token_row["access_token"]
+
+    # 2. Get project repository mapping
+    repo_row = await db.fetchrow(
+        "SELECT org_name, project_name FROM integration_settings WHERE project_id = $1 AND provider = 'GITHUB'",
+        p_uuid
+    )
+    if not repo_row:
+        raise HTTPException(status_code=400, detail="Please configure the target GitHub repository for this project first.")
+    owner, repo = repo_row["org_name"], repo_row["project_name"]
+
+    # 3. Fetch test case details
+    tc = await db.fetchrow("SELECT custom_id, title, scenario FROM test_cases WHERE id = $1", tc_uuid)
+    if not tc:
+        raise HTTPException(status_code=404, detail="Test case not found.")
+    tc_title = tc["title"] or tc["scenario"][:40]
+
+    # Clean branch name
+    branch_name = f"qa-genius-{tc['custom_id'].lower()}"
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json"
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            # 4. Get default branch of the repository
+            repo_res = await client.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers)
+            if repo_res.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch repository details: {repo_res.text}")
+            default_branch = repo_res.json().get("default_branch", "main")
+
+            # 5. Get the default branch latest commit SHA
+            ref_res = await client.get(f"https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{default_branch}", headers=headers)
+            if ref_res.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch branch ref: {ref_res.text}")
+            base_sha = ref_res.json().get("object", {}).get("sha")
+
+            # 6. Create a new branch (ignoring if it already exists)
+            create_branch_body = {
+                "ref": f"refs/heads/{branch_name}",
+                "sha": base_sha
+            }
+            await client.post(
+                f"https://api.github.com/repos/{owner}/{repo}/git/refs",
+                headers=headers,
+                json=create_branch_body
+            )
+
+            # 7. Check if file already exists in branch to get its SHA (for update)
+            file_sha = None
+            file_res = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}/contents/{request.file_path}?ref={branch_name}",
+                headers=headers
+            )
+            if file_res.status_code == 200:
+                file_sha = file_res.json().get("sha")
+
+            # 8. Commit the code file
+            encoded_content = base64.b64encode(request.code_content.encode("utf-8")).decode("utf-8")
+            commit_body = {
+                "message": f"feat: add Playwright test script for {tc['custom_id']}",
+                "content": encoded_content,
+                "branch": branch_name
+            }
+            if file_sha:
+                commit_body["sha"] = file_sha
+
+            commit_res = await client.put(
+                f"https://api.github.com/repos/{owner}/{repo}/contents/{request.file_path}",
+                headers=headers,
+                json=commit_body
+            )
+            if commit_res.status_code not in [200, 201]:
+                raise HTTPException(status_code=500, detail=f"Failed to commit code to repository: {commit_res.text}")
+
+            # 9. Create Pull Request
+            pr_body = {
+                "title": f"QA Automation: Add {tc['custom_id']} script",
+                "body": f"This Pull Request contains the automatically generated Playwright test script for `{tc['custom_id']}`: {tc_title}.\n\n_Generated with ❤️ by QA-Genius-AI._",
+                "head": branch_name,
+                "base": default_branch
+            }
+            pr_res = await client.post(
+                f"https://api.github.com/repos/{owner}/{repo}/pulls",
+                headers=headers,
+                json=pr_body
+            )
+            
+            if pr_res.status_code in [200, 201]:
+                pr_url = pr_res.json().get("html_url")
+                return {"success": True, "pr_created": True, "url": pr_url}
+            elif pr_res.status_code == 422:
+                # PR might already exist, fetch pulls to find it
+                pulls_res = await client.get(f"https://api.github.com/repos/{owner}/{repo}/pulls?head={owner}:{branch_name}", headers=headers)
+                if pulls_res.status_code == 200 and pulls_res.json():
+                    pr_url = pulls_res.json()[0].get("html_url")
+                    return {"success": True, "pr_created": False, "url": pr_url, "message": "PR already exists."}
+                
+                return {"success": True, "pr_created": False, "url": f"https://github.com/{owner}/{repo}/pulls", "message": "Review pull requests on GitHub."}
+            else:
+                raise HTTPException(status_code=500, detail=f"Failed to create GitHub Pull Request: {pr_res.text}")
+
+        except httpx.RequestError as e:
+            logger.error(f"Failed to connect to GitHub API: {e}")
+            raise HTTPException(
+                status_code=504,
+                detail=f"Failed to reach GitHub Server: {str(e)}"
+            )
+
+import uuid

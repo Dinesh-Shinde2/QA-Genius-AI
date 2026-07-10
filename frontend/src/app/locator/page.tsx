@@ -18,7 +18,11 @@ import {
   FileSpreadsheet, 
   Send,
   FileCode,
-  Check
+  Check,
+  Github,
+  ExternalLink,
+  PlayCircle,
+  FolderGit
 } from 'lucide-react';
 
 interface DOMElement {
@@ -50,8 +54,28 @@ interface DOMElement {
 
 export default function LocatorXPage() {
   const router = useRouter();
-  const { token, initializeAuth } = useAppStore();
+  const { 
+    token, initializeAuth, activeProject, testCases, fetchTestCases,
+    githubConnected, githubRepoName, fetchGithubStatus, fetchProjectGithubRepo,
+    pushPlaywrightScriptToGithub
+  } = useAppStore();
+
   const [mounted, setMounted] = useState(false);
+  const [pushingToGit, setPushingToGit] = useState(false);
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [selectedTestCaseId, setSelectedTestCaseId] = useState('');
+  const [githubFilePath, setGithubFilePath] = useState('tests/e2e_flow.spec.js');
+  const [gitStatusMsg, setGitStatusMsg] = useState<string | null>(null);
+  const [gitErrorMsg, setGitErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (token) {
+      fetchGithubStatus();
+      if (activeProject) {
+        fetchProjectGithubRepo(activeProject.id);
+      }
+    }
+  }, [token, activeProject, fetchGithubStatus, fetchProjectGithubRepo]);
 
   // Core states
   const [url, setUrl] = useState('');
@@ -87,6 +111,52 @@ export default function LocatorXPage() {
   }, [token, mounted, router]);
 
   if (!mounted || !token) return null;
+
+  const handlePushToGithub = async () => {
+    if (!activeProject) {
+      alert("Please select a project first.");
+      return;
+    }
+    if (!githubRepoName) {
+      alert("Please map a GitHub repository to this project in the GitHub Sync tab first.");
+      return;
+    }
+    
+    // Fetch project test cases if not loaded
+    await fetchTestCases();
+    setShowPushModal(true);
+  };
+
+  const executeGitPush = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProject || !selectedTestCaseId) return;
+
+    setPushingToGit(true);
+    setGitStatusMsg(null);
+    setGitErrorMsg(null);
+
+    const res = await pushPlaywrightScriptToGithub(
+      activeProject.id,
+      selectedTestCaseId,
+      generatedScript || pomCode,
+      githubFilePath
+    );
+
+    setPushingToGit(false);
+
+    if (res.success) {
+      setGitStatusMsg(res.message || "Script pushed successfully! Opening Pull Request...");
+      if (res.url) {
+        window.open(res.url, "_blank");
+      }
+      setTimeout(() => {
+        setShowPushModal(false);
+        setGitStatusMsg(null);
+      }, 3000);
+    } else {
+      setGitErrorMsg(res.message || "Failed to push script.");
+    }
+  };
 
   const addLog = (msg: string) => {
     setProgressLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -436,6 +506,15 @@ export default function LocatorXPage() {
                             <Download className="w-3.5 h-3.5" />
                             Download
                           </button>
+                          {githubConnected && githubRepoName && (
+                            <button
+                              onClick={handlePushToGithub}
+                              className="text-blue-500 hover:text-blue-400 flex items-center gap-1.5 transition text-[11px] font-bold border-l border-slate-700 pl-3"
+                            >
+                              <Github className="w-3.5 h-3.5" />
+                              Push to GitHub
+                            </button>
+                          )}
                         </div>
                       </div>
                       <pre className="p-5 overflow-auto text-slate-200 max-h-[500px] leading-relaxed scrollbar-thin text-left">
@@ -584,6 +663,15 @@ export default function LocatorXPage() {
                             <Download className="w-3.5 h-3.5" />
                             Download
                           </button>
+                          {githubConnected && githubRepoName && (
+                            <button
+                              onClick={handlePushToGithub}
+                              className="text-blue-500 hover:text-blue-400 flex items-center gap-1.5 transition text-[11px] font-bold border-l border-slate-700 pl-3"
+                            >
+                              <Github className="w-3.5 h-3.5" />
+                              Push to GitHub
+                            </button>
+                          )}
                         </div>
                       </div>
                       <pre className="p-5 overflow-auto text-slate-200 max-h-[500px] leading-relaxed scrollbar-thin text-left">
@@ -637,6 +725,105 @@ export default function LocatorXPage() {
         )}
 
       </div>
+      {/* ─── Push Script to GitHub Modal ────────────────────────────────── */}
+      {showPushModal && activeProject && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={executeGitPush}
+            className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200 text-[#c9d1d9]"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-bold text-white flex items-center gap-1.5">
+                <Github className="w-5 h-5 text-blue-500" />
+                Push Script & Open PR
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowPushModal(false)}
+                className="p-1.5 rounded-lg hover:bg-[#30363d] text-[#8b949e] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {gitStatusMsg && (
+              <div className="mb-4 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 p-3 rounded-lg text-xs flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                {gitStatusMsg}
+              </div>
+            )}
+            {gitErrorMsg && (
+              <div className="mb-4 bg-rose-950/40 border border-rose-500/30 text-rose-400 p-3 rounded-lg text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                {gitErrorMsg}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="p-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-[#8b949e]">
+                <span className="block font-bold text-white mb-0.5">Target Repository:</span>
+                {githubRepoName}
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">File Path in Repository</label>
+                <input
+                  type="text"
+                  required
+                  value={githubFilePath}
+                  onChange={(e) => setGithubFilePath(e.target.value)}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#8b949e] mb-1.5 block">Link to Test Case</label>
+                <select
+                  required
+                  value={selectedTestCaseId}
+                  onChange={(e) => setSelectedTestCaseId(e.target.value)}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="" disabled>Choose a test case to map...</option>
+                  {testCases.map((tc: any) => (
+                    <option key={tc.id} value={tc.id}>
+                      {tc.custom_id}: {tc.title || tc.scenario?.substring(0, 40)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowPushModal(false)}
+                className="px-4 py-2 text-xs font-medium text-[#8b949e] hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={pushingToGit || !selectedTestCaseId || !githubFilePath.trim()}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition active:scale-95 shadow-md shadow-blue-900/10 flex items-center gap-1.5"
+              >
+                {pushingToGit ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Pushing...
+                  </>
+                ) : (
+                  <>
+                    <GitPullRequest className="w-3.5 h-3.5" />
+                    Push & Open PR
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <QACopilot />
     </div>
   );

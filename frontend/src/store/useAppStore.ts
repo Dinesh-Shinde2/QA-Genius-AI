@@ -267,6 +267,9 @@ interface AppState {
  teams: Team[];
  projectMembers: any[];
  notifications: AppNotification[];
+ githubConnected: boolean;
+ githubUsername: string;
+ githubRepoName: string;
  unreadNotificationCount: number;
 
   sprints: Sprint[];
@@ -347,6 +350,14 @@ interface AppState {
  updateProjectMemberRole: (projectId: string, userId: string, role: string) => Promise<boolean>;
  removeProjectMember: (projectId: string, userId: string) => Promise<boolean>;
 
+ // GitHub Integration actions
+ fetchGithubStatus: () => Promise<void>;
+ connectGithub: (token: string) => Promise<boolean>;
+ disconnectGithub: () => Promise<boolean>;
+ fetchProjectGithubRepo: (projectId: string) => Promise<void>;
+ saveProjectGithubRepo: (projectId: string, repoName: string) => Promise<boolean>;
+ pushPlaywrightScriptToGithub: (projectId: string, testCaseId: string, codeContent: string, filePath: string) => Promise<{ success: boolean; url?: string; message?: string }>;
+
  // Notification actions
  fetchNotifications: () => Promise<void>;
  markNotificationsRead: () => Promise<void>;
@@ -371,6 +382,9 @@ export const useAppStore = create<AppState>((set, get) => ({
  bugDashboard: null,
  teams: [],
  projectMembers: [],
+ githubConnected: false,
+ githubUsername: '',
+ githubRepoName: '',
  notifications: [],
   unreadNotificationCount: 0,
   theme: 'dark-monochrome',
@@ -557,6 +571,114 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       console.error('Failed to complete test run', err);
       return false;
+    }
+  },
+
+  fetchGithubStatus: async () => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/integrations/github/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({
+        githubConnected: res.data.connected || false,
+        githubUsername: res.data.github_username || ''
+      });
+    } catch (err) {
+      console.error('Failed to fetch GitHub status', err);
+      set({ githubConnected: false, githubUsername: '' });
+    }
+  },
+
+  connectGithub: async (githubToken: string) => {
+    const { token } = get();
+    if (!token) return false;
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/integrations/github/token`, { token: githubToken }, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      set({
+        githubConnected: true,
+        githubUsername: res.data.github_username || ''
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to connect GitHub', err);
+      return false;
+    }
+  },
+
+  disconnectGithub: async () => {
+    const { token } = get();
+    if (!token) return false;
+    try {
+      await axios.delete(`${API_BASE_URL}/api/integrations/github`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({
+        githubConnected: false,
+        githubUsername: ''
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to disconnect GitHub', err);
+      return false;
+    }
+  },
+
+  fetchProjectGithubRepo: async (projectId: string) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/integrations/github/project-repo?project_id=${projectId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ githubRepoName: res.data.repo_name || '' });
+    } catch (err) {
+      console.error('Failed to fetch project GitHub repo', err);
+      set({ githubRepoName: '' });
+    }
+  },
+
+  saveProjectGithubRepo: async (projectId: string, repoName: string) => {
+    const { token } = get();
+    if (!token) return false;
+    try {
+      await axios.post(`${API_BASE_URL}/api/integrations/github/project-repo`, { project_id: projectId, repo_name: repoName }, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      set({ githubRepoName: repoName });
+      return true;
+    } catch (err) {
+      console.error('Failed to save project GitHub repo', err);
+      return false;
+    }
+  },
+
+  pushPlaywrightScriptToGithub: async (projectId: string, testCaseId: string, codeContent: string, filePath: string) => {
+    const { token } = get();
+    if (!token) return { success: false, message: 'Authorization required.' };
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/integrations/github/push-pr`, {
+        project_id: projectId,
+        test_case_id: testCaseId,
+        code_content: codeContent,
+        file_path: filePath
+      }, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      return {
+        success: true,
+        url: res.data.url,
+        message: res.data.message
+      };
+    } catch (err: any) {
+      console.error('Failed to push Playwright script', err);
+      return {
+        success: false,
+        message: err.response?.data?.detail || 'Failed to push commit/PR to GitHub.'
+      };
     }
   },
   getExecutionComments: async (execId: string) => {
