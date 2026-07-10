@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import ThemeInit from "@/components/ThemeInit";
 
 const inter = Inter({
  subsets: ["latin"],
@@ -19,7 +20,8 @@ export default function RootLayout({
 }>) {
  return (
   <html lang="en" className={`${inter.variable} h-full`}>
-   <body className="min-h-full flex flex-col bg-slate-50 text-slate-800 antialiased font-sans">
+   <body className="min-h-full flex flex-col bg-background text-foreground antialiased font-sans transition-colors duration-300">
+    <ThemeInit />
     {children}
    </body>
   </html>

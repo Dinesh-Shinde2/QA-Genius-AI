@@ -3,7 +3,11 @@ import logging
 import asyncpg
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env using an absolute path relative to this file's directory
+db_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.dirname(db_dir)
+dotenv_path = os.path.join(backend_dir, ".env")
+load_dotenv(dotenv_path=dotenv_path)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:

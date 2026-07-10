@@ -262,13 +262,14 @@ interface AppState {
   sprints: Sprint[];
   releases: Release[];
   
-  fetchSprints: (projectId: string) => Promise<void>;
-  createSprint: (sprint: any) => Promise<boolean>;
-  fetchReleases: (projectId: string) => Promise<void>;
-  createRelease: (release: any) => Promise<boolean>;
-    
- 
- // Auth actions
+   theme: string;
+   setTheme: (theme: string) => void;
+   fetchSprints: (projectId: string) => Promise<void>;
+   createSprint: (sprint: any) => Promise<boolean>;
+   fetchReleases: (projectId: string) => Promise<void>;
+   createRelease: (release: any) => Promise<boolean>;
+  
+  // Auth actions
  login: (credentials: any) => Promise<boolean>;
  registerUser: (userData: any) => Promise<boolean>;
  logout: () => void;
@@ -301,6 +302,7 @@ interface AppState {
  syncBugToADO: (bugId: string) => Promise<{ success: boolean; url?: string; error?: string; work_item_id?: number }>;
  syncTestCaseToADO: (caseId: string) => Promise<{ success: boolean; url?: string; error?: string; work_item_id?: number }>;
  sendCopilotMessage: (projectId: string, message: string, history: any[]) => Promise<string | null>;
+ sendVoiceAssistantMessage: (projectId: string, message: string, history: any[]) => Promise<string | null>;
 
  // Enterprise Bug actions
  fetchEnterpriseBugs: (projectId: string, filters?: any) => Promise<void>;
@@ -351,7 +353,15 @@ export const useAppStore = create<AppState>((set, get) => ({
  bugDashboard: null,
  teams: [],
  notifications: [],
- unreadNotificationCount: 0,
+  unreadNotificationCount: 0,
+  theme: 'dark-monochrome',
+  setTheme: (theme: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('app-theme', theme);
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+    set({ theme });
+  },
 
   sprints: [],
   releases: [],
@@ -461,20 +471,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   initializeAuth: () => {
-  if (typeof window !== 'undefined') {
-   const storedToken = localStorage.getItem('token');
-   const storedUser = localStorage.getItem('user');
-   const storedProject = localStorage.getItem('activeProject');
-   
-   if (storedToken && storedUser) {
-    set({ 
-     token: storedToken, 
-     user: JSON.parse(storedUser),
-     activeProject: storedProject ? JSON.parse(storedProject) : null
-    });
+   if (typeof window !== 'undefined') {
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+    const storedProject = localStorage.getItem('activeProject');
+    
+    // Load and apply theme
+    const savedTheme = localStorage.getItem('app-theme') || 'dark-monochrome';
+    set({ theme: savedTheme });
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    if (storedToken && storedUser) {
+     set({ 
+      token: storedToken, 
+      user: JSON.parse(storedUser),
+      activeProject: storedProject ? JSON.parse(storedProject) : null
+     });
+    }
    }
-  }
- },
+  },
 
  login: async (credentials) => {
   set({ loading: true, error: null });
@@ -1027,6 +1042,29 @@ export const useAppStore = create<AppState>((set, get) => ({
    return res.data.response;
   } catch (err: any) {
    return 'I encountered a connection error. Please verify your backend server state.';
+  }
+ },
+
+ sendVoiceAssistantMessage: async (projectId, message, history) => {
+  const { token } = get();
+  if (!token) return null;
+  try {
+   const res = await axios.post(`${API_BASE_URL}/api/ai/voice-assistant`, {
+    project_id: projectId,
+    message,
+    history
+   }, {
+    headers: { 
+     Authorization: `Bearer ${token}`,
+     'Content-Type': 'application/json'
+    }
+   });
+   return res.data.response;
+  } catch (err: any) {
+   console.error('sendVoiceAssistantMessage error details:', err.response?.data || err.message);
+   const detail = err.response?.data?.detail;
+   const errorMsg = typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : '');
+   return `I encountered a connection error. Details: ${errorMsg || err.message || 'Unknown error'}. Please verify your backend server state.`;
   }
  },
 

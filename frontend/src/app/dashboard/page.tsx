@@ -52,7 +52,8 @@ export default function Dashboard() {
   bugs, 
   coverageMatrix, 
   projects,
-  loading 
+  loading,
+  theme 
  } = useAppStore();
 
  const [mounted, setMounted] = useState(false);
@@ -122,201 +123,250 @@ export default function Dashboard() {
   value: severityCount[k] || 0
  })).filter(item => item.value > 0);
 
- const COLORS = {
-  CRITICAL: '#DC2626', // Danger
-  HIGH: '#EA580C',   // Orange/Dark-warning
-  MEDIUM: '#F59E0B',  // Warning
-  LOW: '#2563EB'    // Primary Brand
- };
+  // Dynamic Chart styling based on theme
+  let barColor = "#ffffff";
+  let chartGridColor = "rgba(255,255,255,0.02)";
+  let chartStrokeColor = "#52525b";
+  let tooltipBg = "#09090b";
+  let tooltipBorder = "#27272a";
+  let tooltipTextColor = "#ffffff";
 
- const statCards = [
-  { id: 'totalProjects', name: 'Total Projects', value: projects.length, icon: FolderRoot, color: 'text-[#2563EB]' },
-  { id: 'openBugs', name: 'Open Bugs', value: bugs.filter(b => b.status === 'OPEN').length, icon: FileSpreadsheet, color: 'text-[#F59E0B]' },
-  { id: 'testCases', name: 'Test Cases', value: testCases.length, icon: BadgeCheck, color: 'text-[#2563EB]' },
-  { id: 'bugsIdentified', name: 'Bugs Identified', value: bugs.length, icon: Bug, color: 'text-[#DC2626]' },
-  { id: 'testExecution', name: 'Test Execution', value: '82%', icon: TrendingUp, color: 'text-[#16A34A]' },
- ];
+  let COLORS = {
+   CRITICAL: '#FFFFFF', // Pure White
+   HIGH: '#E4E4E7',   // Zinc-200
+   MEDIUM: '#A1A1AA',  // Zinc-400
+   LOW: '#52525B'    // Zinc-600
+  };
 
- const activeStatCards = statCards.filter(c => visibleWidgets.includes(c.id));
+  if (theme === 'slate-dark') {
+    barColor = "#3b82f6";
+    chartGridColor = "rgba(255,255,255,0.04)";
+    chartStrokeColor = "#94a3b8";
+    tooltipBg = "#1e293b";
+    tooltipBorder = "#334155";
+    tooltipTextColor = "#f8fafc";
+    COLORS = {
+      CRITICAL: '#ef4444',
+      HIGH: '#f97316',
+      MEDIUM: '#eab308',
+      LOW: '#3b82f6'
+    };
+  } else if (theme === 'cyberpunk') {
+    barColor = "#ff00ff";
+    chartGridColor = "rgba(255,0,255,0.08)";
+    chartStrokeColor = "#00ffff";
+    tooltipBg = "#16002c";
+    tooltipBorder = "#ff00ff";
+    tooltipTextColor = "#00ffff";
+    COLORS = {
+      CRITICAL: '#ff00ff',
+      HIGH: '#00ffff',
+      MEDIUM: '#00ff00',
+      LOW: '#9d00ff'
+    };
+  } else if (theme === 'light-minimal') {
+    barColor = "#2563eb";
+    chartGridColor = "rgba(0,0,0,0.04)";
+    chartStrokeColor = "#78716c";
+    tooltipBg = "#ffffff";
+    tooltipBorder = "#e7e5e4";
+    tooltipTextColor = "#1c1917";
+    COLORS = {
+      CRITICAL: '#dc2626',
+      HIGH: '#ea580c',
+      MEDIUM: '#eab308',
+      LOW: '#2563eb'
+    };
+  }
 
- const handleToggleWidget = (id: string) => {
-   const updated = visibleWidgets.includes(id)
-     ? visibleWidgets.filter(w => w !== id)
-     : [...visibleWidgets, id];
-   setVisibleWidgets(updated);
-   localStorage.setItem('dashboard_widgets', JSON.stringify(updated));
- };
+  const statCards = [
+   { id: 'totalProjects', name: 'Total Projects', value: projects.length, icon: FolderRoot, color: 'text-foreground' },
+   { id: 'openBugs', name: 'Open Bugs', value: bugs.filter(b => b.status === 'OPEN').length, icon: FileSpreadsheet, color: 'text-foreground' },
+   { id: 'testCases', name: 'Test Cases', value: testCases.length, icon: BadgeCheck, color: 'text-foreground' },
+   { id: 'bugsIdentified', name: 'Bugs Identified', value: bugs.length, icon: Bug, color: 'text-foreground' },
+   { id: 'testExecution', name: 'Test Execution', value: '82%', icon: TrendingUp, color: 'text-foreground' },
+  ];
 
- return (
-  <div className="flex min-h-screen bg-[#F7F9FC]">
-   <Sidebar />
-   
-   <div className="flex-1 min-w-0 p-4 md:p-8 flex flex-col gap-6">
+  const activeStatCards = statCards.filter(c => visibleWidgets.includes(c.id));
+
+  const handleToggleWidget = (id: string) => {
+    const updated = visibleWidgets.includes(id)
+      ? visibleWidgets.filter(w => w !== id)
+      : [...visibleWidgets, id];
+    setVisibleWidgets(updated);
+    localStorage.setItem('dashboard_widgets', JSON.stringify(updated));
+  };
+
+  return (
+   <div className="flex min-h-screen bg-background text-foreground transition-colors duration-300">
+    <Sidebar />
     
-    {/* Header Dashboard Banner */}
-    <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-     <div>
-      <h1 className="text-2xl font-bold text-slate-900">System Analytics</h1>
-      <p className="text-xs text-slate-500">
-       {activeProject ? `Metrics dashboard for ${activeProject.name}` : 'Create a project to load parameters.'}
-      </p>
-     </div>
-     <div className="flex items-center gap-3">
-      {activeProject && (
-       <div className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm text-xs text-slate-500 font-mono">
-        ACTIVE STACK: {activeProject.tech_stack || 'Standard QA Framework'}
-       </div>
-      )}
-      <button 
-        onClick={() => setShowWidgetModal(true)}
-        className="px-3 py-1.5 bg-white border border-[#E2E8F0] hover:bg-slate-50 text-[#0F172A] rounded-lg text-xs font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition flex items-center gap-1.5"
-      >
-        <Sliders className="w-3.5 h-3.5" />
-        Configure Widgets
-      </button>
-     </div>
-    </div>
-
-    {/* Stats Grid */}
-    {activeStatCards.length > 0 && (
-      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4`}>
-       {activeStatCards.map((card) => {
-        const Icon = card.icon;
-        return (
-         <div key={card.name} className="bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 rounded-2xl flex items-center justify-between transition-all duration-200">
-          <div className="flex flex-col gap-1.5">
-           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{card.name}</span>
-           <span className="text-2xl font-extrabold text-slate-900 tracking-tight">{card.value}</span>
-          </div>
-          <div className="p-2 rounded-lg bg-[#F7F9FC] border border-[#E2E8F0] transition duration-350">
-           <Icon className={`w-4 h-4 ${card.color}`} />
-          </div>
-         </div>
-        );
-       })}
-      </div>
-    )}
-
-    {/* Workspace Panels split */}
-    {activeProject ? (
-     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      
-      {/* Module Coverage Graph */}
-      {visibleWidgets.includes('executionChart') && (
-        <div className="bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 rounded-2xl flex flex-col gap-4">
-         <div>
-          <h3 className="text-sm font-semibold text-slate-900">Test Execution Summary</h3>
-          <p className="text-[11px] text-[#64748B]">Pass / Fail / Blocked metrics across modules.</p>
-         </div>
-         <div className="h-64 w-full">
-          {moduleChartData.length > 0 ? (
-           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={moduleChartData}>
-             <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-             <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-             <YAxis stroke="#64748b" fontSize={11} />
-             <Tooltip 
-              contentStyle={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '8px' }}
-              labelStyle={{ color: '#0f172a', fontWeight: 'bold' }}
-             />
-             <Bar dataKey="Test Cases" fill="#2563EB" radius={[4, 4, 0, 0]} />
-            </BarChart>
-           </ResponsiveContainer>
-          ) : (
-           <div className="h-full flex items-center justify-center text-slate-500 text-xs font-mono">
-            No data to load. Go to Requirement Analysis.
-           </div>
-          )}
-         </div>
-        </div>
-      )}
-
-      {/* Severity Distribution Pie Chart */}
-      {visibleWidgets.includes('severityChart') && (
-        <div className="bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 rounded-2xl flex flex-col gap-4">
-         <div>
-          <h3 className="text-sm font-semibold text-slate-900">Bug Severity Summary</h3>
-          <p className="text-[11px] text-[#64748B]">Proportions of suggested failure vectors.</p>
-         </div>
-         <div className="h-64 w-full flex items-center justify-center">
-          {bugChartData.length > 0 ? (
-           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-             <Pie
-              data={bugChartData}
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={80}
-              paddingAngle={5}
-              dataKey="value"
-             >
-              {bugChartData.map((entry, index) => (
-               <Cell 
-                key={`cell-${index}`} 
-                fill={COLORS[entry.name as keyof typeof COLORS] || '#2563EB'} 
-               />
-              ))}
-             </Pie>
-             <Tooltip
-              contentStyle={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '8px' }}
-             />
-             <Legend 
-              verticalAlign="bottom" 
-              height={36} 
-              iconType="circle" 
-              formatter={(value) => <span className="text-[10px] font-semibold text-slate-700">{value}</span>}
-             />
-            </PieChart>
-           </ResponsiveContainer>
-          ) : (
-           <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs font-mono gap-1 text-center">
-            <ShieldAlert className="w-8 h-8 text-slate-400" />
-            <span>No bugs generated. <br/> Upload a requirement.</span>
-           </div>
-          )}
-         </div>
-        </div>
-      )}
-      
-     </div>
-    ) : (
-     <div className="flex-1 bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-2xl flex flex-col items-center justify-center p-12 text-center gap-4 border border-dashed">
-      <Layers className="w-16 h-16 text-[#64748B] animate-pulse" />
+    <div className="flex-1 min-w-0 p-5 md:p-8 flex flex-col gap-6">
+     
+     {/* Header Dashboard Banner */}
+     <div className="flex items-center justify-between border-b border-border-card pb-5">
       <div>
-       <h2 className="text-lg font-bold text-slate-900">No Active Projects</h2>
-       <p className="text-xs text-[#64748B] max-w-sm mt-1">
-        Please select an existing project from the sidebar dropdown, or create a new one to initialize the QA parameters.
+       <h1 className="text-2xl font-black text-foreground tracking-tight">System Analytics</h1>
+       <p className="text-xs text-foreground/60 mt-1">
+        {activeProject ? `Metrics dashboard for ${activeProject.name}` : 'Create a project to load parameters.'}
        </p>
       </div>
+      <div className="flex items-center gap-3">
+       {activeProject && (
+        <div className="px-3.5 py-1.5 rounded-lg bg-card border border-border-card text-xs text-foreground/75 font-mono tracking-wider">
+         ACTIVE STACK: {activeProject.tech_stack || 'Standard QA Framework'}
+        </div>
+       )}
+       <button 
+         onClick={() => setShowWidgetModal(true)}
+         className="px-4 py-2 bg-card border border-border-card hover:bg-foreground/5 text-foreground rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-md active:scale-98 cursor-pointer"
+       >
+         <Sliders className="w-3.5 h-3.5" />
+         Configure Widgets
+       </button>
+      </div>
      </div>
-    )}
-    
-   </div>
 
-    {/* ── Configure Widgets Modal ────────────────────────────────────────────── */}
-    {showWidgetModal && (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl w-full max-w-2xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#F7F9FC]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] border border-blue-200 flex items-center justify-center">
-                <Sliders className="w-4 h-4 text-[#2563EB]" />
-              </div>
-              <div>
-                <h2 className="text-sm font-black text-[#0F172A]">Configure Dashboard Widgets</h2>
-                <p className="text-[10px] text-[#64748B] mt-0.5">Toggle active components on System Analytics page</p>
-              </div>
-            </div>
-            <button onClick={() => setShowWidgetModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition"><X className="w-5 h-5" /></button>
+     {/* Stats Grid */}
+     {activeStatCards.length > 0 && (
+       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {activeStatCards.map((card) => {
+         const Icon = card.icon;
+         return (
+          <div key={card.name} className="bg-card border border-border-card p-5 rounded-2xl flex items-center justify-between transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground/35 hover:shadow-xl group">
+           <div className="flex flex-col gap-2">
+            <span className="text-[9px] text-foreground/50 font-bold uppercase tracking-widest">{card.name}</span>
+            <span className="text-2xl font-black text-foreground tracking-tight leading-none">{card.value}</span>
+           </div>
+           <div className="p-2.5 rounded-xl bg-background border border-border-card group-hover:border-foreground/20 transition duration-300">
+            <Icon className={`w-4 h-4 ${card.color} group-hover:scale-105 transition-transform duration-300`} />
+           </div>
           </div>
-          <div className="p-6 flex flex-col gap-5 max-h-[70vh] overflow-y-auto">
-            
-            <div className="flex flex-col gap-5">
-              {['KPI Cards', 'Charts'].map(category => (
-                <div key={category}>
-                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-1.5">{category}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+         );
+        })}
+       </div>
+     )}
+
+     {/* Workspace Panels split */}
+     {activeProject ? (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+       
+       {/* Module Coverage Graph */}
+       {visibleWidgets.includes('executionChart') && (
+         <div className="bg-card border border-border-card p-5 rounded-2xl flex flex-col gap-5 hover:border-foreground/20 transition duration-300 shadow-md">
+          <div>
+           <h3 className="text-sm font-bold text-foreground tracking-tight">Test Execution Summary</h3>
+           <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">Pass / Fail / Blocked metrics across modules.</p>
+          </div>
+          <div className="h-64 w-full">
+           {moduleChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+             <BarChart data={moduleChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
+              <XAxis dataKey="name" stroke={chartStrokeColor} fontSize={10} />
+              <YAxis stroke={chartStrokeColor} fontSize={10} />
+              <Tooltip 
+               contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '12px', color: tooltipTextColor }}
+               labelStyle={{ color: tooltipTextColor, fontWeight: 'bold' }}
+              />
+              <Bar dataKey="Test Cases" fill={barColor} radius={[4, 4, 0, 0]} />
+             </BarChart>
+            </ResponsiveContainer>
+           ) : (
+            <div className="h-full flex items-center justify-center text-foreground/50 text-xs font-mono">
+             No data to load. Go to Requirement Analysis.
+            </div>
+           )}
+          </div>
+         </div>
+       )}
+
+       {/* Severity Distribution Pie Chart */}
+       {visibleWidgets.includes('severityChart') && (
+         <div className="bg-card border border-border-card p-5 rounded-2xl flex flex-col gap-5 hover:border-foreground/20 transition duration-300 shadow-md">
+          <div>
+           <h3 className="text-sm font-bold text-foreground tracking-tight">Bug Severity Summary</h3>
+           <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">Proportions of suggested failure vectors.</p>
+          </div>
+          <div className="h-64 w-full flex items-center justify-center">
+           {bugChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+             <PieChart>
+              <Pie
+               data={bugChartData}
+               cx="50%"
+               cy="50%"
+               innerRadius={60}
+               outerRadius={80}
+               paddingAngle={5}
+               dataKey="value"
+              >
+               {bugChartData.map((entry, index) => (
+                <Cell 
+                 key={`cell-${index}`} 
+                 fill={COLORS[entry.name as keyof typeof COLORS] || barColor} 
+                />
+               ))}
+              </Pie>
+              <Tooltip
+               contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '12px', color: tooltipTextColor }}
+              />
+              <Legend 
+               verticalAlign="bottom" 
+               height={36} 
+               iconType="circle" 
+               formatter={(value) => <span className="text-[10px] font-bold text-foreground/60">{value}</span>}
+              />
+             </PieChart>
+            </ResponsiveContainer>
+           ) : (
+            <div className="h-full flex flex-col items-center justify-center text-foreground/50 text-xs font-mono gap-2.5 text-center">
+             <ShieldAlert className="w-8 h-8 text-foreground/35" />
+             <span>No bugs generated. <br/> Upload a requirement.</span>
+            </div>
+           )}
+          </div>
+         </div>
+       )}
+       
+      </div>
+     ) : (
+      <div className="flex-1 bg-card border border-border-card border-dashed rounded-2xl flex flex-col items-center justify-center p-12 text-center gap-4">
+       <Layers className="w-12 h-12 text-foreground/35 animate-pulse" />
+       <div>
+        <h2 className="text-base font-bold text-foreground tracking-tight">No Active Projects</h2>
+        <p className="text-xs text-foreground/50 max-w-sm mt-1 leading-relaxed">
+         Please select an existing project from the sidebar dropdown, or create a new one to initialize the QA parameters.
+        </p>
+       </div>
+      </div>
+     )}
+     
+    </div>
+
+     {/* ── Configure Widgets Modal ────────────────────────────────────────────── */}
+     {showWidgetModal && (
+       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+         <div className="bg-card border border-border-card rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+           <div className="flex items-center justify-between px-6 py-4 border-b border-border-card bg-foreground/5">
+             <div className="flex items-center gap-3">
+               <div className="w-8 h-8 rounded-lg bg-background border border-border-card flex items-center justify-center">
+                 <Sliders className="w-4 h-4 text-foreground" />
+               </div>
+               <div>
+                 <h2 className="text-sm font-black text-foreground">Configure Dashboard Widgets</h2>
+                 <p className="text-[10px] text-foreground/50 mt-0.5">Toggle active components on System Analytics page</p>
+               </div>
+             </div>
+             <button onClick={() => setShowWidgetModal(false)} className="p-2 text-foreground/50 hover:text-foreground rounded-full transition cursor-pointer"><X className="w-5 h-5" /></button>
+           </div>
+           <div className="p-6 flex flex-col gap-6 max-h-[70vh] overflow-y-auto scrollbar-thin">
+             
+             <div className="flex flex-col gap-6">
+               {['KPI Cards', 'Charts'].map(category => (
+                 <div key={category} className="flex flex-col gap-3">
+                   <h3 className="text-[9px] font-bold text-foreground/50 uppercase tracking-widest border-b border-border-card pb-2">{category}</h3>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {WIDGETS_CONFIG.filter(w => w.category === category).map(w => {
                       const isChecked = visibleWidgets.includes(w.id);
                       const Icon = w.icon;
@@ -326,40 +376,40 @@ export default function Dashboard() {
                           onClick={() => handleToggleWidget(w.id)}
                           className={`p-4 border rounded-xl flex items-center justify-between gap-4 cursor-pointer transition select-none group ${
                             isChecked 
-                              ? 'bg-[#EFF6FF]/40 border-[#2563EB] shadow-sm' 
-                              : 'bg-white border-[#E2E8F0] hover:border-slate-350 hover:bg-[#F7F9FC]'
+                              ? 'bg-foreground/5 border-foreground shadow-sm' 
+                              : 'bg-background border-border-card hover:border-foreground/20 hover:bg-foreground/5'
                           }`}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`p-2 rounded-lg border shrink-0 transition ${isChecked ? 'bg-[#EFF6FF] border-[#2563EB]/30 text-[#2563EB]' : 'bg-[#F7F9FC] border-[#E2E8F0] text-slate-400'}`}>
+                            <div className={`p-2.5 rounded-lg border shrink-0 transition ${isChecked ? 'bg-foreground border-foreground text-background' : 'bg-background border-border-card text-foreground/50 group-hover:text-foreground/80'}`}>
                               <Icon className="w-4 h-4" />
                             </div>
                             <div>
-                              <p className={`text-xs font-bold transition ${isChecked ? 'text-slate-900' : 'text-slate-700'}`}>{w.label}</p>
-                              <p className="text-[10px] text-[#64748B] mt-0.5 leading-relaxed">{w.desc}</p>
+                              <p className={`text-xs font-bold transition ${isChecked ? 'text-foreground' : 'text-foreground/80'}`}>{w.label}</p>
+                              <p className="text-[10px] text-foreground/50 mt-1 leading-relaxed">{w.desc}</p>
                             </div>
                           </div>
                           
                           {/* Switch Toggle */}
-                          <div className={`w-8 h-4 rounded-full p-0.5 transition-colors shrink-0 ${isChecked ? 'bg-[#2563EB]' : 'bg-slate-300'}`}>
-                            <div className={`w-3 h-3 rounded-full bg-white transition-transform ${isChecked ? 'translate-x-4' : 'translate-x-0'}`} />
+                          <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors shrink-0 ${isChecked ? 'bg-foreground' : 'bg-foreground/20'}`}>
+                            <div className={`w-3.5 h-3.5 rounded-full transition-transform ${isChecked ? 'translate-x-3.5 bg-background' : 'translate-x-0 bg-foreground/45'}`} />
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-            <button onClick={() => setShowWidgetModal(false)} className="px-5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg text-xs font-bold transition shadow-sm">
+                 </div>
+               ))}
+             </div>
+           </div>
+           <div className="p-4 border-t border-border-card bg-foreground/5 flex justify-end">
+             <button onClick={() => setShowWidgetModal(false)} className="px-5 py-2 bg-foreground hover:bg-foreground/90 text-background rounded-lg text-xs font-bold transition shadow-md active:scale-98 cursor-pointer">
               Done
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
+             </button>
+           </div>
+         </div>
+       </div>
+     )}
 
    <QACopilot />
   </div>

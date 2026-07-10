@@ -153,7 +153,7 @@ export default function RequirementsPage() {
  };
 
  return (
-  <div className="flex min-h-screen bg-slate-50">
+  <div className="flex min-h-screen bg-background text-foreground transition-colors duration-300">
    <Sidebar />
 
    <div className="flex-1 min-w-0 p-4 md:p-8 flex flex-col gap-6">

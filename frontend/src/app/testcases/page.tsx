@@ -90,6 +90,10 @@ export default function TestCasesPage() {
   const [selectedAIParams, setSelectedAIParams] = useState<string[]>(['Positive', 'Negative', 'Boundary', 'Edge Case']);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGeneratedCases, setAiGeneratedCases] = useState<any[] | null>(null);
+  const [selectedAiCaseIndices, setSelectedAiCaseIndices] = useState<number[]>([]);
+  const [editingAiCaseIndex, setEditingAiCaseIndex] = useState<number | null>(null);
+  const [editingAiCaseForm, setEditingAiCaseForm] = useState<any>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Log Bug from Test Case Modal (inline)
   const [showLogBugModal, setShowLogBugModal] = useState(false);
@@ -230,19 +234,46 @@ export default function TestCasesPage() {
   const handleGenerateAI = async () => {
     if (!activeProject || !aiRequirement.trim() || !aiModule.trim()) return;
     setAiLoading(true);
+    setAiError(null);
     const result = await generateManualTestCasesPreview(activeProject.id, aiModule, aiRequirement, selectedAIParams);
-    setAiGeneratedCases(result);
+    if (result === null) {
+      const storeError = useAppStore.getState().error || "AI Testcase generation failed.";
+      setAiError(storeError);
+      setAiGeneratedCases(null);
+      setSelectedAiCaseIndices([]);
+    } else {
+      setAiGeneratedCases(result);
+      if (result && Array.isArray(result)) {
+        setSelectedAiCaseIndices(result.map((_, idx) => idx));
+      } else {
+        setSelectedAiCaseIndices([]);
+      }
+    }
     setAiLoading(false);
   };
 
   const handleSaveAITestCases = async () => {
     if (!activeProject || !aiGeneratedCases) return;
+    const casesToSave = aiGeneratedCases.filter((_, idx) => selectedAiCaseIndices.includes(idx));
+    if (casesToSave.length === 0) {
+      alert("Please select at least one test case to save.");
+      return;
+    }
     setFormSaving(true);
-    await saveManualTestCases(activeProject.id, aiGeneratedCases);
-    setShowAIModal(false);
-    setAiRequirement('');
-    setAiModule('');
-    setAiGeneratedCases(null);
+    setAiError(null);
+    const success = await saveManualTestCases(activeProject.id, casesToSave);
+    if (!success) {
+      const storeError = useAppStore.getState().error || "Failed to save test cases.";
+      setAiError(storeError);
+    } else {
+      setShowAIModal(false);
+      setAiRequirement('');
+      setAiModule('');
+      setAiGeneratedCases(null);
+      setSelectedAiCaseIndices([]);
+      setEditingAiCaseIndex(null);
+      setEditingAiCaseForm(null);
+    }
     setFormSaving(false);
   };
 
@@ -356,7 +387,7 @@ export default function TestCasesPage() {
    const labelCls = 'text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block';
 
   return (
-   <div className="flex min-h-screen bg-slate-50">
+   <div className="flex min-h-screen bg-background text-foreground transition-colors duration-300">
     <Sidebar />
     
     <main className="flex-1 min-w-0 p-4 md:p-6 pt-16 md:pt-6 flex flex-col gap-6 relative">
@@ -866,10 +897,20 @@ export default function TestCasesPage() {
               <h2 className="text-sm font-black text-slate-900">AI Test Case Generator</h2>
               <span className="text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-bold">Powered by AI</span>
             </div>
-            <button onClick={() => { setShowAIModal(false); setAiGeneratedCases(null); setAiRequirement(''); }} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition"><X className="w-5 h-5" /></button>
+            <button onClick={() => { setShowAIModal(false); setAiGeneratedCases(null); setAiRequirement(''); setSelectedAiCaseIndices([]); setEditingAiCaseIndex(null); setAiError(null); }} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition"><X className="w-5 h-5" /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            {aiError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl flex items-start gap-3 animate-in fade-in duration-200">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-bold">Operation Failed</p>
+                  <p className="text-[11px] mt-0.5 text-rose-600/90 leading-relaxed font-semibold">{aiError}</p>
+                </div>
+                <button type="button" onClick={() => setAiError(null)} className="text-rose-500 hover:text-rose-700 text-xs font-bold self-start">Dismiss</button>
+              </div>
+            )}
             {!aiGeneratedCases ? (
               <>
                 <div>
@@ -925,48 +966,221 @@ export default function TestCasesPage() {
               </>
             ) : (
               <>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3 bg-slate-50 border border-slate-200/60 p-3 rounded-xl">
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-500" strokeWidth={3} />
-                    <span className="text-xs font-bold text-emerald-600">AI generated {aiGeneratedCases.length} test cases</span>
+                    <span className="text-xs font-bold text-slate-750">AI generated {aiGeneratedCases.length} test cases ({selectedAiCaseIndices.length} selected)</span>
                   </div>
-                  <button onClick={() => setAiGeneratedCases(null)} className="text-xs text-[#2F81F7] hover:underline">← Regenerate / Modify Prompt</button>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        if (selectedAiCaseIndices.length === aiGeneratedCases.length) {
+                          setSelectedAiCaseIndices([]);
+                        } else {
+                          setSelectedAiCaseIndices(aiGeneratedCases.map((_, i) => i));
+                        }
+                      }}
+                      className="text-xs font-bold text-[#2F81F7] hover:text-blue-600 transition flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm"
+                    >
+                      {selectedAiCaseIndices.length === aiGeneratedCases.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    <button onClick={() => { setAiGeneratedCases(null); setSelectedAiCaseIndices([]); setEditingAiCaseIndex(null); setAiError(null); }} className="text-xs font-bold text-[#2F81F7] hover:underline">
+                      ← Regenerate / Modify Prompt
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-4">
-                  {aiGeneratedCases.map((tc, idx) => (
-                    <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
-                      <div className="flex justify-between items-start gap-3">
-                        <span className="text-[10px] px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 font-bold uppercase">{tc.case_type || 'Functional'}</span>
-                        <span className="text-[10px] text-slate-500 font-bold">{tc.priority || 'P2'}</span>
+                  {aiGeneratedCases.map((tc, idx) => {
+                    const isSelected = selectedAiCaseIndices.includes(idx);
+                    const isEditingThis = editingAiCaseIndex === idx;
+
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`border rounded-xl p-4 space-y-3 transition-all duration-200 ${
+                          isSelected 
+                            ? 'bg-blue-50/10 border-blue-200 shadow-sm ring-1 ring-blue-100' 
+                            : 'bg-slate-50/50 border-slate-200/70 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-105 pb-2">
+                          <div className="flex items-center gap-2.5">
+                            {/* Selection Checkbox */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedAiCaseIndices(prev => prev.filter(x => x !== idx));
+                                } else {
+                                  setSelectedAiCaseIndices(prev => [...prev, idx]);
+                                }
+                              }}
+                              className={`w-4 h-4 rounded border flex items-center justify-center transition shrink-0 ${
+                                isSelected
+                                  ? 'bg-[#2F81F7] border-[#2F81F7] text-white'
+                                  : 'border-slate-300 bg-white text-transparent hover:border-slate-400'
+                              }`}
+                            >
+                              <Check className="w-2.5 h-2.5" strokeWidth={4} />
+                            </button>
+
+                            {!isEditingThis && (
+                              <span className="text-[10px] px-2 py-0.5 rounded border border-blue-200 bg-blue-50/50 text-blue-700 font-bold uppercase">
+                                {tc.case_type || 'Functional'}
+                              </span>
+                            )}
+
+                            <span className="font-mono text-xs font-bold text-slate-500">
+                              {tc.custom_id || `TC-${String(idx + 1).padStart(3, '0')}`}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2.5">
+                            {!isEditingThis && (
+                              <>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${getPriorityBadgeClass(tc.priority || 'P2')}`}>
+                                  {tc.priority || 'P2'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAiCaseIndex(idx);
+                                    setEditingAiCaseForm({ ...tc });
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-[#2F81F7] hover:bg-slate-100 rounded-lg transition"
+                                  title="Edit Test Case"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {isEditingThis ? (
+                          <div className="space-y-3 pt-1">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Case Type</label>
+                                <select
+                                  value={editingAiCaseForm.case_type || 'Functional'}
+                                  onChange={e => setEditingAiCaseForm((f: any) => ({ ...f, case_type: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:border-[#2F81F7]"
+                                >
+                                  {['Functional', 'UI', 'API', 'Database', 'Security', 'Performance', 'Regression', 'Smoke'].map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Priority</label>
+                                <select
+                                  value={editingAiCaseForm.priority || 'P2'}
+                                  onChange={e => setEditingAiCaseForm((f: any) => ({ ...f, priority: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:border-[#2F81F7]"
+                                >
+                                  {['P1', 'P2', 'P3', 'P4'].map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Scenario / Objective *</label>
+                              <input
+                                type="text"
+                                value={editingAiCaseForm.scenario || ''}
+                                onChange={e => setEditingAiCaseForm((f: any) => ({ ...f, scenario: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:border-[#2F81F7]"
+                                placeholder="Scenario description..."
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Steps *</label>
+                              <textarea
+                                rows={3}
+                                value={editingAiCaseForm.steps || ''}
+                                onChange={e => setEditingAiCaseForm((f: any) => ({ ...f, steps: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-white text-slate-800 focus:outline-none focus:border-[#2F81F7] resize-none"
+                                placeholder="1. Step one..."
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Expected Result *</label>
+                              <textarea
+                                rows={2}
+                                value={editingAiCaseForm.expected_result || ''}
+                                onChange={e => setEditingAiCaseForm((f: any) => ({ ...f, expected_result: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:border-[#2F81F7] resize-none"
+                                placeholder="Expected result description..."
+                              />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                              <button
+                                type="button"
+                                onClick={() => setEditingAiCaseIndex(null)}
+                                className="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!editingAiCaseForm.scenario?.trim() || !editingAiCaseForm.steps?.trim() || !editingAiCaseForm.expected_result?.trim()) {
+                                    alert("Scenario, Steps, and Expected Result are required.");
+                                    return;
+                                  }
+                                  setAiGeneratedCases(prev => {
+                                    if (!prev) return null;
+                                    const updated = [...prev];
+                                    updated[idx] = { ...editingAiCaseForm };
+                                    return updated;
+                                  });
+                                  setEditingAiCaseIndex(null);
+                                }}
+                                className="px-3 py-1.5 bg-[#2F81F7] hover:bg-blue-600 text-white text-[10px] font-bold rounded-lg transition shadow-sm"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {tc.scenario && (
+                              <div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-bold">Scenario</p>
+                                <p className="text-xs text-slate-700 font-semibold mt-0.5">{tc.scenario}</p>
+                              </div>
+                            )}
+                            {tc.steps && (
+                              <div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-bold">Steps</p>
+                                <p className="text-xs text-slate-700 whitespace-pre-wrap font-mono text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100 mt-0.5">{tc.steps}</p>
+                              </div>
+                            )}
+                            {tc.expected_result && (
+                              <div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-bold">Expected Result</p>
+                                <p className="text-xs text-slate-700 font-semibold mt-0.5">{tc.expected_result}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900">{tc.title}</h4>
-                      {tc.scenario && (
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Scenario</p>
-                          <p className="text-xs text-slate-700">{tc.scenario}</p>
-                        </div>
-                      )}
-                      {tc.steps && (
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Steps</p>
-                          <p className="text-xs text-slate-700 whitespace-pre-wrap font-mono text-[10px]">{tc.steps}</p>
-                        </div>
-                      )}
-                      {tc.expected_result && (
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Expected Result</p>
-                          <p className="text-xs text-slate-700">{tc.expected_result}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
           </div>
           {aiGeneratedCases && (
             <div className="shrink-0 flex justify-end gap-2 px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
-              <button onClick={() => setAiGeneratedCases(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition">Regenerate</button>
+              <button onClick={() => { setAiGeneratedCases(null); setSelectedAiCaseIndices([]); setEditingAiCaseIndex(null); setAiError(null); }} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition">Regenerate</button>
               <button onClick={handleSaveAITestCases} disabled={formSaving} className="px-5 py-2 bg-[#2F81F7] hover:bg-blue-600 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition shadow-sm">
                 {formSaving ? 'Saving...' : 'Save Test Cases'}
               </button>

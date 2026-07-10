@@ -1,6 +1,14 @@
 import sys
 import os
 import logging
+import asyncio
+
+if sys.platform == 'win32':
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
+
 # Add parent directory to sys.path to resolve 'backend' package imports under all run contexts
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -9,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database.db import get_db_pool, close_db_pool
-from backend.api import auth, projects, upload, generator, reports, integrations
+from backend.api import auth, projects, upload, generator, reports, integrations, locator
 from backend.api import teams as teams_router
 from backend.api import bugs_enterprise as bugs_enterprise_router
 from backend.api import sprints, releases, test_executions, pipelines
@@ -239,7 +247,7 @@ app = FastAPI(
 # Configure CORS for nextjs frontend local developer configurations
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In development allow all; in production lock to frontend domain
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], # In development allow local frontend hosts; in production lock to domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -260,6 +268,7 @@ app.include_router(releases.router)
 app.include_router(test_executions.router)
 app.include_router(test_cases.router)
 app.include_router(pipelines.router)
+app.include_router(locator.router)
 
 @app.get("/")
 def read_root():
@@ -272,3 +281,4 @@ def read_root():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+# Test reload comment

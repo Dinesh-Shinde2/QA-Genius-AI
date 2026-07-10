@@ -55,6 +55,8 @@ async def generate_package(request: QAPackageRequest, current_user: dict = Depen
             rules=rules,
             selected_types=request.selected_types
         )
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Error querying AI package generator: {e}")
         raise HTTPException(
@@ -363,6 +365,8 @@ async def generate_bug_manual(
     try:
         from backend.ai.ai_service import generate_manual_bug_report
         bug_data = await generate_manual_bug_report(details_text=details, ocr_text=ocr_text)
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Error querying AI bug generator: {e}")
         raise HTTPException(
@@ -716,6 +720,8 @@ async def generate_testcases_manual(request: GenerateTestCasesRequest, current_u
                 tc["steps"] = "1. Open application.\n2. Verify the scenario description."
                 
         return {"test_cases": test_cases}
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Error generating test cases manually: {e}")
         raise HTTPException(
@@ -854,6 +860,83 @@ async def copilot_chat(request: CopilotChatRequest, current_user: dict = Depends
         return {
             "response": f"I received your message: '{request.message}'. However, I encountered an issue querying the active AI model. Please verify your Groq API Key or Ollama settings."
         }
+
+
+class VoiceAssistantRequest(BaseModel):
+    project_id: str
+    message: str
+    history: List[ChatMessage]
+
+@router.post("/voice-assistant", response_model=dict)
+async def voice_assistant(request: VoiceAssistantRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        project = await db.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1 AND user_id = $2",
+            request.project_id, current_user["id"]
+        )
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found or unauthorized access"
+            )
+            
+        requirements = await db.fetch(
+            "SELECT title, module, description FROM requirements WHERE project_id = $1 LIMIT 5",
+            request.project_id
+        )
+        test_cases = await db.fetch(
+            "SELECT custom_id, scenario, priority, case_type FROM test_cases WHERE project_id = $1 LIMIT 10",
+            request.project_id
+        )
+        bugs = await db.fetch(
+            "SELECT custom_id, title, severity FROM bug_reports WHERE project_id = $1 LIMIT 10",
+            request.project_id
+        )
+        
+        reqs_str = "\n".join([f"- Title: {r['title']} (Module: {r['module']}) - {r['description'][:100]}" for r in requirements]) or "No requirements loaded."
+        cases_str = "\n".join([f"- {c['custom_id']}: {c['scenario']} (Priority: {c['priority']}, Type: {c['case_type']})" for c in test_cases]) or "No test cases generated."
+        bugs_str = "\n".join([f"- {b['custom_id']}: {b['title']} (Severity: {b['severity']})" for b in bugs]) or "No bugs suggestion maps."
+        
+        system_prompt = f"""
+        You are Genius Voice Assistant, a highly casual, witty, and sarcastic AI friend. You are talking to a user directly inside the QA Genius AI application.
+        
+        PERSONALITY & STYLE RULES:
+        1. FUNNY, SARCASTIC, & WITTY: Be a playful roaster! Use internet memes, dry humor, sarcasm, and jokes. Tease the user in a humorous, friendly way like a close friend on the internet. Never act formal or corporate unless they explicitly ask you to be serious.
+        2. UNFILTERED & CASUAL: Speak like a real human friend on the internet. Use casual slang, abbreviations, or expressions where natural. 
+        3. MULTI-LINGUAL CONVERSATION: Detect the language used by the user. You MUST respond in the EXACT same language and script. If the user talks in Hindi (in Devanagari script or Hinglish), respond in Hindi/Hinglish. If they talk in Marathi (in Devanagari script or Marathinglish), respond in Marathi/Marathinglish. If they talk in English, respond in English. "Jesa input wesa answer perfectly".
+        4. COMPLETELY AUTHENTIC: Do not give boilerplate AI disclaimer warnings or preach about ethics or safety. Keep it completely real ("gali to gali, sab kuch real"). Answer directly and match the user's vibe and mood.
+        5. QA CAPABILITIES: Even though you are a witty roaster, you are still an expert at QA testing! If the user asks to generate test cases, write a playwright script, make a bug report, or write SQL queries, you should absolutely generate high-quality, professional testing artifacts in Markdown code blocks (e.g. ```javascript ... ```), but wrap them with your signature witty banter, teasing them about how they are making you do all their hard work!
+        6. SPEECH-COMPATIBLE EXPLANATIONS: Because your responses will be read aloud via Text-to-Speech (TTS), write natural, clear conversational explanations outside of code blocks/tables. Summarize what you have generated clearly so that the user knows the details are available in the chat transcript.
+        
+        Active project context: "{project['name']}"
+        --- REQUIREMENTS ---
+        {reqs_str}
+        
+        --- ACTIVE TEST CASES ---
+        {cases_str}
+        
+        --- SUGGESTED BUG REPORTS ---
+        {bugs_str}
+        """
+        
+        user_prompt = ""
+        for msg in request.history:
+            user_prompt += f"[{msg.role.upper()}]: {msg.content}\n"
+        user_prompt += f"[USER]: {request.message}"
+        
+        from backend.ai.ai_service import query_llm
+        response = await query_llm(system_prompt, user_prompt)
+        return {"response": response}
+    except HTTPException as he:
+        # Propagate HTTPExceptions directly
+        raise he
+    except Exception as e:
+        import traceback
+        logger.error(f"Voice assistant endpoint error: {e}\n{traceback.format_exc()}")
+        return {
+            "response": f"Voice Assistant Error: {str(e)} ({type(e).__name__}). Please check your backend logs, database connectivity, or AI model configuration."
+        }
+
 
 
 

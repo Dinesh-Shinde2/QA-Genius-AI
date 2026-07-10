@@ -19,9 +19,10 @@ import {
  ShieldAlert,
  Menu,
  X,
- PlayCircle
+ PlayCircle,
+ Palette
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function Sidebar() {
  const pathname = usePathname();
@@ -36,7 +37,9 @@ export default function Sidebar() {
   unreadNotificationCount,
   fetchNotifications,
   markNotificationsRead,
-  notifications
+  notifications,
+  theme,
+  setTheme
  } = useAppStore();
  
  const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -47,6 +50,23 @@ export default function Sidebar() {
  const [newProjectTech, setNewProjectTech] = useState('');
  const [newProjectTemplate, setNewProjectTemplate] = useState('CONTACT_CENTER');
  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+ const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+
+ const themeRef = useRef<HTMLDivElement>(null);
+ const projectRef = useRef<HTMLDivElement>(null);
+
+ useEffect(() => {
+   function handleClickOutside(event: MouseEvent) {
+     if (themeRef.current && !themeRef.current.contains(event.target as Node)) {
+       setThemeDropdownOpen(false);
+     }
+     if (projectRef.current && !projectRef.current.contains(event.target as Node)) {
+       setDropdownOpen(false);
+     }
+   }
+   document.addEventListener('mousedown', handleClickOutside);
+   return () => document.removeEventListener('mousedown', handleClickOutside);
+ }, []);
 
  useEffect(() => {
   fetchProjects();
@@ -89,6 +109,7 @@ export default function Sidebar() {
      { name: 'Test Cases', href: '/testcases', icon: CheckSquare },
      { name: 'Test Execution', href: '/test-execution', icon: CheckSquare },
      { name: 'Bug Tracker', href: '/bugs', icon: Bug },
+     { name: 'LocatorX', href: '/locator', icon: FileText },
     ]
    },
    {
@@ -106,55 +127,61 @@ export default function Sidebar() {
     {/* Mobile Toggle Button */}
     <button 
      onClick={() => setMobileMenuOpen(true)}
-     className="md:hidden fixed top-3 left-4 z-40 p-1.5 bg-white rounded-md border border-slate-200 text-slate-700 shadow-sm"
+     className="md:hidden fixed top-3 left-4 z-40 p-1.5 bg-card rounded-md border border-border-card text-foreground shadow-sm transition hover:scale-105"
     >
      <Menu className="w-5 h-5" />
     </button>
     
     {/* Mobile Overlay */}
     {mobileMenuOpen && (
-     <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setMobileMenuOpen(false)} />
+     <div className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setMobileMenuOpen(false)} />
     )}
 
-    <div className={`fixed md:sticky top-0 left-0 z-50 w-64 h-screen border-r border-[#E2E8F0] bg-[#FFFFFF] flex flex-col p-4 shrink-0 shadow-sm transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+    <div className={`fixed md:sticky top-0 left-0 z-50 w-64 h-screen border-r border-border-sidebar bg-sidebar flex flex-col p-5 shrink-0 transition-all duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
      
-     {/* Header: Title logo & Project Selector */}
+     {/* Header: Title logo, Theme Switcher & Project Selector */}
      <div className="flex flex-col gap-5 mb-5 flex-shrink-0">
       {/* Close button for mobile */}
       {mobileMenuOpen && (
-       <button onClick={() => setMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-500 hover:text-slate-900">
+       <button onClick={() => setMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-foreground/60 hover:text-foreground transition">
         <X className="w-5 h-5" />
        </button>
       )}
       {/* Title logo */}
-       <div className="flex items-center gap-2.5 px-2 py-1">
-        <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center font-black text-white ">
+       <div className="flex items-center gap-3 px-1 py-1">
+        <div className="w-8 h-8 rounded-lg bg-foreground text-background flex items-center justify-center font-black text-sm select-none border border-foreground hover:scale-105 transition-transform duration-300">
          QG
         </div>
         <div>
-         <h1 className="font-extrabold text-slate-900 tracking-tight text-sm">QA GENIUS</h1>
-         <span className="text-[9px] text-[#64748B] font-mono tracking-widest uppercase font-semibold">Enterprise Test Mgmt</span>
+         <h1 className="font-black text-foreground tracking-tight text-sm">QA GENIUS</h1>
+         <span className="text-[9px] text-foreground/50 font-mono tracking-widest uppercase font-bold">Enterprise Test Mgmt</span>
         </div>
       </div>
 
+
+
       {/* Project Selector Dropdown */}
-      <div className="relative">
+      <div className="relative" ref={projectRef}>
         <button 
-         onClick={() => setDropdownOpen(!dropdownOpen)}
-         className="w-full bg-white border border-[#E2E8F0] shadow-sm px-3 py-2.5 rounded-xl flex items-center justify-between text-left text-xs hover:border-[#2563EB]/30 transition duration-200 group active:scale-98"
+         type="button"
+         onClick={() => {
+           setDropdownOpen(!dropdownOpen);
+           setThemeDropdownOpen(false);
+         }}
+         className="w-full bg-card border border-border-card hover:border-foreground/30 shadow-sm px-3.5 py-3 rounded-xl flex items-center justify-between text-left text-xs transition-all duration-200 group active:scale-98"
         >
-         <div className="flex items-center gap-2 truncate">
-          <Briefcase className="w-3.5 h-3.5 text-[#2563EB] shrink-0 group-hover:animate-pulse" />
-          <span className="truncate text-[#64748B] font-semibold group-hover:text-slate-900 transition">
+         <div className="flex items-center gap-2.5 truncate">
+          <Briefcase className="w-4 h-4 text-foreground/60 shrink-0 group-hover:text-foreground transition-colors" />
+          <span className="truncate text-foreground/80 font-semibold group-hover:text-foreground transition">
            {activeProject ? activeProject.name : 'Select Project...'}
           </span>
          </div>
-         <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-700 transition shrink-0" />
+         <ChevronDown className="w-3.5 h-3.5 text-foreground/45 group-hover:text-foreground transition shrink-0" />
         </button>
 
        {dropdownOpen && (
-        <div className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200/85 rounded-xl z-50 py-1 overflow-hidden shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
-         <div className="max-h-48 overflow-y-auto">
+        <div className="absolute left-0 right-0 mt-2 bg-card border border-border-card rounded-xl z-50 py-1.5 overflow-hidden shadow-xl animate-in fade-in slide-in-from-top-1 duration-150">
+         <div className="max-h-48 overflow-y-auto scrollbar-thin">
           {projects.map((p) => (
            <button
             key={p.id}
@@ -162,23 +189,23 @@ export default function Sidebar() {
              setActiveProject(p);
              setDropdownOpen(false);
             }}
-             className={`w-full px-3.5 py-2.5 text-left text-xs hover:bg-[#EFF6FF] hover:text-[#2563EB] transition ${
-              activeProject?.id === p.id ? 'bg-[#EFF6FF] text-[#2563EB] font-bold border-l-2 border-[#2563EB]' : 'text-[#64748B] font-medium'
+             className={`w-full px-4 py-2.5 text-left text-xs hover:bg-foreground/5 hover:text-foreground transition ${
+              activeProject?.id === p.id ? 'bg-foreground/5 text-foreground font-bold border-l-2 border-foreground' : 'text-foreground/70 font-medium'
              }`}
            >
             {p.name}
            </button>
           ))}
          </div>
-         <div className="border-t border-slate-200/80 mt-1">
+         <div className="border-t border-border-card mt-1.5 pt-1">
           <button
            onClick={() => {
             setShowNewProjectModal(true);
             setDropdownOpen(false);
            }}
-           className="w-full px-3.5 py-2.5 text-left text-xs text-slate-500 hover:bg-slate-50/15 flex items-center gap-1.5 font-bold transition duration-200"
+           className="w-full px-4 py-2.5 text-left text-xs text-foreground/80 hover:bg-foreground/5 flex items-center gap-2 font-bold transition duration-200"
           >
-           <Plus className="w-3.5 h-3.5" />
+           <Plus className="w-3.5 h-3.5 text-foreground/60" />
            Create Project...
           </button>
          </div>
@@ -188,10 +215,10 @@ export default function Sidebar() {
      </div>
 
      {/* Nav Links - Scrollable */}
-     <div className="flex-1 overflow-y-auto pr-1 -mr-1 flex flex-col gap-4 min-h-0 select-none [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded">
+     <div className="flex-1 overflow-y-auto pr-1 -mr-1 flex flex-col gap-5 min-h-0 select-none [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-border-card [&::-webkit-scrollbar-thumb]:rounded">
       {navGroups.map((group) => (
-       <div key={group.title} className="flex flex-col gap-1.5">
-        <span className="px-3.5 text-[9px] font-black text-[#94A3B8] tracking-widest uppercase font-mono">
+       <div key={group.title} className="flex flex-col gap-2">
+        <span className="px-4 text-[9px] font-bold text-foreground/50 tracking-widest uppercase font-mono">
          {group.title}
         </span>
         <div className="flex flex-col gap-1">
@@ -202,13 +229,13 @@ export default function Sidebar() {
            <Link
             key={item.name}
             href={item.href}
-            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group relative ${
              isActive 
-              ? 'bg-[#EFF6FF] text-[#2563EB] border-l-2 border-[#2563EB]' 
-              : 'text-[#64748B] hover:bg-[#F7F9FC] hover:text-[#0F172A]'
+              ? 'bg-foreground text-background shadow-md scale-[1.02]' 
+              : 'text-foreground/70 hover:bg-foreground/5 hover:text-foreground'
             }`}
            >
-            <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#64748B]'}`} />
+            <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-background' : 'text-foreground/60 group-hover:text-foreground'}`} />
             <span>{item.name}</span>
            </Link>
           );
@@ -219,42 +246,93 @@ export default function Sidebar() {
      </div>
 
     {/* User profile & Log Out */}
-    <div className="flex flex-col gap-3 pt-4 border-t border-slate-200">
+    <div className="flex flex-col gap-3 pt-5 border-t border-border-sidebar">
+      {/* Custom Theme Selector Dropdown */}
+      <div className="relative" ref={themeRef}>
+        <button 
+         type="button"
+         onClick={() => {
+           setThemeDropdownOpen(!themeDropdownOpen);
+           setDropdownOpen(false);
+         }}
+         className="w-full bg-card border border-border-card hover:border-foreground/30 shadow-sm px-3.5 py-2.5 rounded-xl flex items-center justify-between text-left text-xs transition-all duration-200 group active:scale-98"
+        >
+         <div className="flex items-center gap-2.5 truncate">
+          <Palette className="w-4 h-4 text-foreground/60 shrink-0 group-hover:text-foreground transition-colors" />
+          <div className="flex flex-col text-left">
+            <span className="text-[9px] text-foreground/45 font-bold uppercase tracking-wider font-mono">Theme</span>
+            <span className="truncate text-foreground/80 font-semibold group-hover:text-foreground transition mt-0.5">
+             {theme === 'dark-monochrome' ? 'Monochrome' :
+              theme === 'slate-dark' ? 'Slate Dark' :
+              theme === 'cyberpunk' ? 'Cyberpunk' :
+              theme === 'light-minimal' ? 'Light Minimal' : 'Theme'}
+            </span>
+          </div>
+         </div>
+         <ChevronDown className="w-3.5 h-3.5 text-foreground/45 group-hover:text-foreground transition shrink-0" />
+        </button>
+
+       {themeDropdownOpen && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 bg-card border border-border-card rounded-xl z-50 py-1.5 overflow-hidden shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+          {[
+            { id: 'dark-monochrome', name: 'Monochrome' },
+            { id: 'slate-dark', name: 'Slate Dark' },
+            { id: 'cyberpunk', name: 'Cyberpunk' },
+            { id: 'light-minimal', name: 'Light Minimal' }
+          ].map((t) => (
+           <button
+            key={t.id}
+            type="button"
+            onClick={() => {
+             setTheme(t.id);
+             setThemeDropdownOpen(false);
+            }}
+             className={`w-full px-4 py-2.5 text-left text-xs hover:bg-foreground/5 hover:text-foreground transition ${
+              theme === t.id ? 'bg-foreground/5 text-foreground font-bold border-l-2 border-foreground' : 'text-foreground/70 font-medium'
+             }`}
+           >
+            {t.name}
+           </button>
+          ))}
+        </div>
+       )}
+      </div>
+
      {/* Notification Bell */}
      <div className="relative">
       <button
        onClick={() => { setShowNotifPanel(!showNotifPanel); if (unreadNotificationCount > 0) markNotificationsRead(); }}
-       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-white/20 hover:text-slate-800 transition-all duration-200"
+       className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-foreground/70 hover:bg-foreground/5 hover:text-foreground transition-all duration-200"
       >
        <div className="relative">
         <Bell className="w-4 h-4" />
         {unreadNotificationCount > 0 && (
-         <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-500 rounded-full flex items-center justify-center text-[9px] font-black text-slate-900 animate-bounce">
+         <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-foreground text-background rounded-full flex items-center justify-center text-[8px] font-black animate-bounce border border-background">
           {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
          </span>
         )}
        </div>
        Notifications
        {unreadNotificationCount > 0 && (
-        <span className="ml-auto text-[9px] bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded-full font-bold">{unreadNotificationCount} new</span>
+        <span className="ml-auto text-[9px] bg-foreground/10 text-foreground px-2 py-0.5 rounded-full font-bold select-none">{unreadNotificationCount} new</span>
        )}
       </button>
 
       {showNotifPanel && (
-       <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-slate-200 rounded-xl z-50 shadow-2xl overflow-hidden">
-        <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
-         <span className="text-xs font-bold text-slate-700">Notifications</span>
-         <button onClick={() => setShowNotifPanel(false)} className="text-xs text-slate-500 hover:text-slate-900">✕</button>
+       <div className="absolute bottom-full left-0 right-0 mb-2 bg-card border border-border-card rounded-xl z-50 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="px-4 py-3 border-b border-border-card flex items-center justify-between bg-foreground/5">
+         <span className="text-xs font-bold text-foreground">Notifications</span>
+         <button onClick={() => setShowNotifPanel(false)} className="text-foreground/60 hover:text-foreground transition text-[10px]">✕</button>
         </div>
-        <div className="max-h-64 overflow-y-auto">
+        <div className="max-h-60 overflow-y-auto scrollbar-thin">
          {notifications.length === 0 ? (
-          <div className="px-3 py-4 text-center text-xs text-slate-500">No notifications yet</div>
+          <div className="px-4 py-5 text-center text-xs text-foreground/50">No notifications yet</div>
          ) : (
           notifications.slice(0, 10).map((n) => (
-           <div key={n.id} className={`px-3 py-2.5 border-b border-slate-200 text-xs ${!n.is_read ? 'bg-blue-950/10' : ''}`}>
-            <div className="font-semibold text-slate-700 truncate">{n.bug_title || 'Bug Update'}</div>
-            <div className="text-slate-500 mt-0.5 line-clamp-2">{n.message}</div>
-            <div className="text-slate-600 text-[10px] mt-1">{new Date(n.created_at).toLocaleTimeString()}</div>
+           <div key={n.id} className={`px-4 py-3 border-b border-border-card text-xs transition hover:bg-foreground/5 ${!n.is_read ? 'bg-foreground/5' : ''}`}>
+            <div className="font-bold text-foreground truncate">{n.bug_title || 'Bug Update'}</div>
+            <div className="text-foreground/75 mt-1 line-clamp-2 leading-relaxed">{n.message}</div>
+            <div className="text-foreground/45 text-[9px] mt-1.5 font-mono">{new Date(n.created_at).toLocaleTimeString()}</div>
            </div>
           ))
          )}
@@ -263,20 +341,20 @@ export default function Sidebar() {
       )}
      </div>
 
-      <div className="flex items-center gap-2.5 px-2 bg-[#F7F9FC] p-2.5 rounded-xl border border-[#E2E8F0]">
-       <div className="w-8 h-8 rounded-full bg-[#2563EB] flex items-center justify-center text-xs font-bold text-white border border-[#2563EB]/30">
+      <div className="flex items-center gap-3 px-3 bg-card p-3 rounded-xl border border-border-card hover:border-foreground/30 transition duration-200">
+       <div className="w-8 h-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-black select-none shadow">
         {user?.name ? user.name[0].toUpperCase() : 'U'}
        </div>
-      <div className="overflow-hidden">
-       <p className="text-xs font-bold text-slate-800 truncate">{user?.name || 'QA Operator'}</p>
-       <p className="text-[9px] text-slate-500 font-semibold truncate capitalize tracking-wider font-mono">{user?.role?.toLowerCase().replace('_', ' ') || 'QA Engineer'}</p>
+      <div className="overflow-hidden flex-1">
+       <p className="text-xs font-bold text-foreground truncate leading-snug">{user?.name || 'QA Operator'}</p>
+       <p className="text-[9px] text-foreground/50 font-bold truncate capitalize tracking-wider font-mono mt-0.5">{user?.role?.toLowerCase().replace('_', ' ') || 'QA Engineer'}</p>
       </div>
      </div>
      <button 
       onClick={logout}
-      className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-bold text-rose-400 hover:bg-rose-950/10 hover:text-rose-350 transition-all duration-200"
+      className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-foreground/50 hover:bg-foreground/5 hover:text-foreground transition-all duration-200"
      >
-      <LogOut className="w-3.5 h-3.5" />
+      <LogOut className="w-4 h-4 shrink-0 text-foreground/50" />
       Sign Out
      </button>
     </div>
@@ -284,52 +362,52 @@ export default function Sidebar() {
     {/* New Project Dialog Modal */}
     {showNewProjectModal && (
      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 shadow-sm w-full max-w-md p-6 rounded-xl flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
+      <div className="bg-card border border-border-card shadow-xl w-full max-w-md p-6 rounded-2xl flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-250">
        <div>
-        <h2 className="text-lg font-bold text-slate-900">Create New Project</h2>
-        <p className="text-xs text-slate-500">Initialize a workspace with starter parameters or domain settings.</p>
+        <h2 className="text-lg font-black text-foreground tracking-tight">Create New Project</h2>
+        <p className="text-xs text-foreground/60 mt-1">Initialize a workspace with starter parameters or presets.</p>
        </div>
        
        <form onSubmit={handleCreateProject} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-         <label className="text-xs font-semibold text-slate-700">Project Name *</label>
+         <label className="text-xs font-bold text-foreground/60">Project Name *</label>
          <input 
           type="text" 
           required
           placeholder="e.g. CX Connect Mobile App"
           value={newProjectName}
           onChange={(e) => setNewProjectName(e.target.value)}
-          className="glass-input px-3 py-2 text-sm"
+          className="bg-background border border-border-card hover:border-foreground/30 focus:border-foreground px-3 py-2 text-sm rounded-lg outline-none text-foreground placeholder-foreground/30 transition duration-200"
          />
         </div>
 
         <div className="flex flex-col gap-1.5">
-         <label className="text-xs font-semibold text-slate-700">Description</label>
+         <label className="text-xs font-bold text-foreground/60">Description</label>
          <textarea 
           placeholder="Summary of this project context..."
           value={newProjectDesc}
           onChange={(e) => setNewProjectDesc(e.target.value)}
-          className="glass-input px-3 py-2 text-sm h-20 resize-none"
+          className="bg-background border border-border-card hover:border-foreground/30 focus:border-foreground px-3 py-2 text-sm rounded-lg outline-none text-foreground placeholder-foreground/30 transition duration-200 h-20 resize-none"
          />
         </div>
 
         <div className="flex flex-col gap-1.5">
-         <label className="text-xs font-semibold text-slate-700">Tech Stack</label>
+         <label className="text-xs font-bold text-foreground/60">Tech Stack</label>
          <input 
           type="text" 
           placeholder="React, Python, AWS RDS"
           value={newProjectTech}
           onChange={(e) => setNewProjectTech(e.target.value)}
-          className="glass-input px-3 py-2 text-sm"
+          className="bg-background border border-border-card hover:border-foreground/30 focus:border-foreground px-3 py-2 text-sm rounded-lg outline-none text-foreground placeholder-foreground/30 transition duration-200"
          />
         </div>
 
         <div className="flex flex-col gap-1.5">
-         <label className="text-xs font-semibold text-slate-700">Domain Template Presets</label>
+         <label className="text-xs font-bold text-foreground/60">Domain Template Presets</label>
           <select
            value={newProjectTemplate}
            onChange={(e) => setNewProjectTemplate(e.target.value)}
-           className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm bg-white text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+           className="w-full px-3 py-2 border border-border-card rounded-lg text-sm bg-background hover:border-foreground/30 text-foreground focus:outline-none focus:border-foreground transition cursor-pointer"
           >
           <option value="CONTACT_CENTER">Contact Center (IVR & Queues)</option>
           <option value="CRM">CRM (Lead pipelines)</option>
@@ -340,17 +418,17 @@ export default function Sidebar() {
          </select>
         </div>
 
-        <div className="flex justify-end gap-2 mt-2">
+        <div className="flex justify-end gap-2.5 mt-3 border-t border-border-card pt-4">
          <button 
           type="button"
           onClick={() => setShowNewProjectModal(false)}
-          className="px-4 py-2 text-xs font-medium text-slate-500 hover:text-slate-800"
+          className="px-4 py-2 text-xs font-bold text-foreground/60 hover:text-foreground transition"
          >
           Cancel
          </button>
           <button 
            type="submit"
-           className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white transition shadow-sm"
+           className="px-4 py-2 text-xs font-bold rounded-lg bg-foreground hover:bg-foreground/90 text-background transition shadow-md active:scale-98"
           >
           Create Project
          </button>
@@ -361,5 +439,5 @@ export default function Sidebar() {
     )}
    </div>
   </>
- );
+  );
 }

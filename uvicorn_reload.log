@@ -1,0 +1,32 @@
+INFO:     Will watch for changes in these directories: ['c:\\Users\\Ishan\\Desktop\\QA-Genius-AI']
+INFO:     Uvicorn running on http://127.0.0.1:8003 (Press CTRL+C to quit)
+INFO:     Started reloader process [39376] using WatchFiles
+INFO:     Started server process [36960]
+INFO:     Waiting for application startup.
+2026-07-05 12:51:05,455 [INFO] backend.main: Starting up FastAPI QA Genius AI Backend...
+2026-07-05 12:51:05,455 [INFO] backend.database.db: Initializing database connection pool...
+2026-07-05 12:51:05,724 [INFO] backend.database.db: Database connection pool established successfully.
+2026-07-05 12:51:05,774 [INFO] backend.main: Enterprise Bug Module & Advanced QA Modules: All tables and indices created/verified successfully.
+INFO:     Application startup complete.
+2026-07-05 12:51:08,417 [INFO] backend.api.locator: LocatorX: Analyzing URL: https://example.com
+2026-07-05 12:51:08,418 [ERROR] asyncio: Task exception was never retrieved
+future: <Task finished name='Task-28' coro=<Connection.run() done, defined at C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py:265> exception=NotImplementedError()>
+Traceback (most recent call last):
+  File "C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py", line 272, in run
+    await self._transport.connect()
+  File "C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_transport.py", line 133, in connect
+    raise exc
+  File "C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_transport.py", line 120, in connect
+    self._proc = await asyncio.create_subprocess_exec(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\asyncio\subprocess.py", line 222, in create_subprocess_exec
+    transport, protocol = await loop.subprocess_exec(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 1708, in subprocess_exec
+    transport = await self._make_subprocess_transport(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ishan\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 502, in _make_subprocess_transport
+    raise NotImplementedError
+NotImplementedError
+2026-07-05 12:51:08,424 [ERROR] backend.api.locator: LocatorX Analysis Error: 
+INFO:     127.0.0.1:54042 - "POST /api/locator/analyze HTTP/1.1" 500 Internal Server Error

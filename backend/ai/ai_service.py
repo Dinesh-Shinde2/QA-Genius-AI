@@ -4,6 +4,13 @@ import logging
 import httpx
 from dotenv import load_dotenv
 
+# Load .env using an absolute path relative to this file's directory
+ai_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.dirname(ai_dir)
+dotenv_path = os.path.join(backend_dir, ".env")
+load_dotenv(dotenv_path=dotenv_path)
+from fastapi import HTTPException, status
+
 from backend.ai.prompts import (
     ANALYSIS_SYSTEM_PROMPT,
     ANALYSIS_USER_TEMPLATE,
@@ -11,7 +18,7 @@ from backend.ai.prompts import (
     QA_PACKAGE_USER_TEMPLATE
 )
 
-load_dotenv()
+# Env variables loaded at startup above
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +27,100 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+XAI_API_KEY = os.getenv("XAI_API_KEY", "")
+XAI_MODEL = os.getenv("XAI_MODEL", "grok-2-latest")
 
 async def query_llm(system_prompt: str, user_prompt: str) -> str:
     """
-    Submits a prompt using local Ollama (if online) or falls back to Groq Cloud API.
+    Submits a prompt using xAI Grok API (highest priority if configured),
+    Google Gemini API, local Ollama, or falls back to Groq Cloud API.
     """
+    errors = []
+
+    # 0. Try xAI Grok API if configured
+    if XAI_API_KEY:
+        try:
+            logger.info(f"Querying xAI Grok API ({XAI_MODEL})...")
+            headers = {
+                "Authorization": f"Bearer {XAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": XAI_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.2
+            }
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.x.ai/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=60.0
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result["choices"][0]["message"]["content"]
+                    if content:
+                        return content
+                else:
+                    errors.append(f"xAI Grok status {response.status_code}: {response.text}")
+        except Exception as e:
+            errors.append(f"xAI Grok query failed: {str(e)}")
+            logger.warning(f"xAI Grok query failed: {e}")
+
+    # 1. Try Google Gemini API if configured
+    if GEMINI_API_KEY:
+        for model in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.0-flash-lite-001"]:
+            try:
+                logger.info(f"Querying Gemini API ({model})...")
+                headers = {
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [
+                                {"text": user_prompt}
+                            ]
+                        }
+                    ],
+                    "systemInstruction": {
+                        "parts": [
+                            {"text": system_prompt}
+                        ]
+                    },
+                    "generationConfig": {
+                        "responseMimeType": "application/json",
+                        "temperature": 0.2
+                    }
+                }
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(url, json=payload, headers=headers, timeout=60.0)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        try:
+                            content = result["candidates"][0]["content"]["parts"][0]["text"]
+                            if content:
+                                return content
+                        except (KeyError, IndexError) as parse_err:
+                            errors.append(f"Gemini {model} parse error: {parse_err}")
+                            logger.error(f"Failed to parse Gemini {model} response: {parse_err}")
+                    elif response.status_code == 429:
+                        errors.append(f"Gemini {model} rate limit (429)")
+                    elif response.status_code == 403:
+                        errors.append(f"Gemini {model} forbidden (403)")
+                    else:
+                        errors.append(f"Gemini {model} error ({response.status_code}): {response.text}")
+            except Exception as e:
+                errors.append(f"Gemini {model} exception: {str(e)}")
+
     # 1. Try Local Ollama if configured
     if os.getenv("USE_OLLAMA", "true").lower() == "true":
         try:
@@ -47,7 +143,10 @@ async def query_llm(system_prompt: str, user_prompt: str) -> str:
                     content = result.get("message", {}).get("content", "")
                     if content:
                         return content
+                else:
+                    errors.append(f"Ollama status {response.status_code}: {response.text}")
         except Exception as e:
+            errors.append(f"Ollama query failed: {str(e)}")
             logger.warning(f"Ollama query failed: {e}. Trying Groq fallback...")
             
     # 2. Try Groq API
@@ -64,9 +163,10 @@ async def query_llm(system_prompt: str, user_prompt: str) -> str:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": 0.2,
-                "response_format": {"type": "json_object"}
+                "temperature": 0.2
             }
+            if "json" in system_prompt.lower() or "json" in user_prompt.lower():
+                payload["response_format"] = {"type": "json_object"}
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     "https://api.groq.com/openai/v1/chat/completions",
@@ -79,12 +179,16 @@ async def query_llm(system_prompt: str, user_prompt: str) -> str:
                     content = result["choices"][0]["message"]["content"]
                     if content:
                         return content
+                else:
+                    errors.append(f"Groq status {response.status_code}: {response.text}")
         except Exception as e:
+            errors.append(f"Groq API call failed: {str(e)}")
             logger.error(f"Groq API call failed: {e}")
             
     # 3. Offline Mock Fallback
-    logger.warning("All LLM connections failed. Generating fallback mock structure.")
-    raise ConnectionError("No active LLM providers could be contacted.")
+    err_details = " | ".join(errors)
+    logger.warning(f"All LLM connections failed. Details: {err_details}")
+    raise ConnectionError(f"No active LLM providers could be contacted. Error Details: {err_details}")
 
 def clean_json_response(raw_text: str) -> dict:
     """
