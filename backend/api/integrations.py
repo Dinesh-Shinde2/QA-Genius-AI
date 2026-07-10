@@ -101,11 +101,12 @@ async def sync_bug_to_ado(bug_id: str, current_user: dict = Depends(get_current_
     project = settings["project_name"]
     pat = settings["pat_token"]
     
+    steps_html = bug.get('steps_to_reproduce', '').replace('\n', '<br/>')
     description_html = f"""
     <div><b>Description:</b> {bug['description']}</div>
     <hr/>
     <div><b>Preconditions:</b> {bug.get('preconditions') or 'None'}</div>
-    <div><b>Steps to Reproduce:</b><br/>{bug.get('steps_to_reproduce', '').replace('\n', '<br/>')}</div>
+    <div><b>Steps to Reproduce:</b><br/>{steps_html}</div>
     <hr/>
     <div><b>Expected Outcome:</b> {bug.get('expected_result')}</div>
     <div><b>Observed Symptom (Actual):</b> {bug.get('actual_result')}</div>
