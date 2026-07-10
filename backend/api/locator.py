@@ -249,7 +249,9 @@ async def generate_locators_ai(chunk: List[Dict[str, Any]], locator_types: List[
         )
         
     chunk_for_prompt = [{"ref": idx, **el} for idx, el in enumerate(chunk)]
-    
+    type_instructions_str = '\n'.join(type_instructions)
+    output_fields_str = ',\n  '.join(output_fields)
+
     system_prompt = (
         "You are a senior test automation engineer. Generate locators for these VISIBLE web elements.\n\n"
         f"LOCATOR TYPES REQUESTED: {', '.join(locator_types)}\n\n"
@@ -260,7 +262,7 @@ async def generate_locators_ai(chunk: List[Dict[str, Any]], locator_types: List[
         "4. Visible text (short, unique) -> Medium confidence\n"
         "5. Positional index -> Low confidence (last resort only)\n\n"
         "TYPE-SPECIFIC RULES:\n"
-        f"{'\n'.join(type_instructions)}\n\n"
+        f"{type_instructions_str}\n\n"
         "Skip dynamic IDs: ember123, gwt-uid-4, :r0:, long hex strings, pure numbers."
     )
     
@@ -274,7 +276,7 @@ async def generate_locators_ai(chunk: List[Dict[str, Any]], locator_types: List[
         "  \"elementType\": string,\n"
         "  \"locatorStrategy\": string,\n"
         "  \"confidence\": \"High\" | \"Medium\" | \"Low\",\n"
-        f"  {',\n  '.join(output_fields)}\n"
+        f"  {output_fields_str}\n"
         "}"
     )
     
