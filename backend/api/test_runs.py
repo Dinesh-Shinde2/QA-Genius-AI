@@ -134,6 +134,7 @@ async def get_test_run(run_id: str, current_user: dict = Depends(get_current_use
                u.name as executed_by_name
         FROM test_cases tc
         LEFT JOIN test_run_results trr ON tc.id = trr.test_case_id AND trr.test_run_id = $1
+        LEFT JOIN users u ON trr.executed_by = u.id
         WHERE tc.project_id = $2
         ORDER BY tc.custom_id ASC
         """,
