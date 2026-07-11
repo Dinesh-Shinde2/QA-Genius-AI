@@ -712,8 +712,14 @@ export default function TestExecutionPage() {
                 <p className="whitespace-pre-wrap leading-relaxed">{selectedCase.steps}</p>
                 <p><strong className="text-white">Expected Result (Auto-imported):</strong></p>
                 <p className="leading-relaxed">{selectedCase.expected_result}</p>
-                <p><strong className="text-white">Actual Result (Your observations):</strong></p>
-                <p className="italic text-rose-300 leading-relaxed">{actualResult.trim() || 'Observed failure mismatch.'}</p>
+                <p><strong className="text-[#ffffff]">Actual Result (Your observations):</strong></p>
+                <textarea
+                  required
+                  value={actualResult}
+                  onChange={(e) => setActualResult(e.target.value)}
+                  placeholder="Describe the observed failure mismatch or symptoms..."
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#ffffff] focus:outline-none focus:border-rose-500 h-20 resize-none leading-relaxed mt-1"
+                />
               </div>
             </div>
 
