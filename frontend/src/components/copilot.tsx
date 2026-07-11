@@ -53,6 +53,95 @@ export default function QACopilot() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const transcriptRef = useRef('');
 
+  // Draggable positioning state
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [hasMoved, setHasMoved] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const startPos = useRef({ x: 0, y: 0 });
+  const dragStart = useRef({ x: 0, y: 0 });
+  const isMoveTriggered = useRef(false);
+
+  // Setup dragging handlers
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (clientX: number, clientY: number) => {
+      const dx = clientX - startPos.current.x;
+      const dy = clientY - startPos.current.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        isMoveTriggered.current = true;
+      }
+
+      const newX = clientX - dragStart.current.x;
+      const newY = clientY - dragStart.current.y;
+
+      // Constrain within viewport bounds
+      const boundedX = Math.max(10, Math.min(window.innerWidth - 60, newX));
+      const boundedY = Math.max(10, Math.min(window.innerHeight - 60, newY));
+
+      setPos({ x: boundedX, y: boundedY });
+      setHasMoved(true);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      handleMove(e.clientX, e.clientY);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        handleMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
+    const handleEnd = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDragging]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    isMoveTriggered.current = false;
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    const currentX = rect ? rect.left : window.innerWidth - 80;
+    const currentY = rect ? rect.top : window.innerHeight - 80;
+
+    startPos.current = { x: e.clientX, y: e.clientY };
+    dragStart.current = {
+      x: e.clientX - currentX,
+      y: e.clientY - currentY
+    };
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    isMoveTriggered.current = false;
+    const touch = e.touches[0];
+    const rect = containerRef.current?.getBoundingClientRect();
+    const currentX = rect ? rect.left : window.innerWidth - 80;
+    const currentY = rect ? rect.top : window.innerHeight - 80;
+
+    startPos.current = { x: touch.clientX, y: touch.clientY };
+    dragStart.current = {
+      x: touch.clientX - currentX,
+      y: touch.clientY - currentY
+    };
+  };
+
   // Sync transcription ref for recognition callbacks
   useEffect(() => {
     transcriptRef.current = interimTranscript;
@@ -330,7 +419,11 @@ export default function QACopilot() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div 
+      ref={containerRef}
+      className={`fixed z-50 flex flex-col items-end ${hasMoved ? '' : 'bottom-6 right-6'}`}
+      style={hasMoved ? { left: `${pos.x}px`, top: `${pos.y}px`, bottom: 'auto', right: 'auto' } : {}}
+    >
       {/* Waveform Keyframes Style Block */}
       <style>{`
         @keyframes voice-wave {
@@ -351,7 +444,7 @@ export default function QACopilot() {
 
       {/* Chat Window Panel */}
       {isOpen && (
-        <div className={`w-85 sm:w-100 h-[600px] mb-4 border rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300 backdrop-blur-2xl transition-all ${
+        <div className={`absolute bottom-full right-0 mb-4 w-85 sm:w-100 h-[600px] border rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300 backdrop-blur-2xl transition-all ${
           theme === 'dark' 
             ? 'bg-slate-950/98 border-slate-800 text-slate-100 shadow-[0_10px_50px_rgba(0,0,0,0.8)]' 
             : 'bg-white/98 border-slate-200 text-slate-800 shadow-[0_10px_40px_rgba(0,0,0,0.15)]'
@@ -619,25 +712,26 @@ export default function QACopilot() {
 
       {/* Floating Toggle button */}
       <button 
-        onClick={() => {
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onClick={(e) => {
+          if (isMoveTriggered.current) {
+            e.preventDefault();
+            return;
+          }
           setIsOpen(!isOpen);
           if (isOpen) stopSpeaking();
         }}
-        className="px-5 py-3 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-2.5 transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_10px_25px_rgba(37,99,235,0.45)] group border border-blue-500/30"
+        className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-90 shadow-[0_6px_20px_rgba(37,99,235,0.45)] group border border-blue-500/30 cursor-move"
+        title={isOpen ? "Close Assistant" : "Ask Genius Voice Assistant"}
       >
         {isOpen ? (
-          <>
-            <X className="w-4 h-4" />
-            Close Assistant
-          </>
+          <X className="w-5 h-5" />
         ) : (
-          <>
-            <div className="relative flex items-center justify-center">
-              <span className="absolute inline-flex h-2.5 w-2.5 rounded-full bg-sky-300 opacity-75 animate-ping"></span>
-              <Mic className="w-4 h-4 relative z-10 group-hover:animate-bounce" />
-            </div>
-            Ask Genius Voice Assistant
-          </>
+          <div className="relative flex items-center justify-center">
+            <span className="absolute inline-flex h-2.5 w-2.5 rounded-full bg-sky-300 opacity-75 animate-ping"></span>
+            <Mic className="w-5 h-5 relative z-10 group-hover:animate-bounce" />
+          </div>
         )}
       </button>
     </div>

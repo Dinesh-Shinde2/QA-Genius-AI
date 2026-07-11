@@ -131,14 +131,41 @@ export default function TestExecutionPage() {
     if (!selectedCase || !activeProject) return;
 
     setSubmittingResult(true);
+
+    const formatStepsToString = (steps: any): string => {
+      if (!steps) return '';
+      if (Array.isArray(steps)) return steps.join('\n');
+      if (typeof steps === 'string') {
+        try {
+          const parsed = JSON.parse(steps);
+          if (Array.isArray(parsed)) return parsed.join('\n');
+        } catch (err) {}
+        return steps;
+      }
+      return String(steps);
+    };
+
+    const formatPreconditionsToString = (preconds: any): string => {
+      if (!preconds) return '';
+      if (Array.isArray(preconds)) return preconds.join('\n');
+      if (typeof preconds === 'string') {
+        try {
+          const parsed = JSON.parse(preconds);
+          if (Array.isArray(parsed)) return parsed.join('\n');
+        } catch (err) {}
+        return preconds;
+      }
+      return String(preconds);
+    };
+
     const bugData = {
       project_id: activeProject.id,
       title: bugTitle.trim(),
       module: selectedCase.module || 'General',
       feature: selectedCase.feature || 'General',
       description: `Manual test case run failed during execution run.\n\nScenario: ${selectedCase.scenario}`,
-      preconditions: selectedCase.preconditions || '',
-      steps_to_reproduce: selectedCase.steps || '',
+      preconditions: formatPreconditionsToString(selectedCase.preconditions),
+      steps_to_reproduce: formatStepsToString(selectedCase.steps),
       expected_result: selectedCase.expected_result || '',
       actual_result: actualResult.trim() || 'Test case step failure observed.',
       severity: bugSeverity,
