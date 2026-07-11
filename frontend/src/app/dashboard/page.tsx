@@ -55,7 +55,10 @@ export default function Dashboard() {
   loading,
   theme,
   testRuns,
-  fetchTestRuns
+  fetchTestRuns,
+  fetchTestCases,
+  fetchEnterpriseBugs,
+  fetchCoverageMatrix
  } = useAppStore();
 
  const [mounted, setMounted] = useState(false);
@@ -68,8 +71,11 @@ export default function Dashboard() {
  useEffect(() => {
    if (activeProject && token) {
      fetchTestRuns(activeProject.id);
+     fetchTestCases();
+     fetchEnterpriseBugs(activeProject.id);
+     fetchCoverageMatrix(activeProject.id);
    }
- }, [activeProject, token, fetchTestRuns]);
+ }, [activeProject, token, fetchTestRuns, fetchTestCases, fetchEnterpriseBugs, fetchCoverageMatrix]);
 
  useEffect(() => {
   setMounted(true);
@@ -232,13 +238,13 @@ export default function Dashboard() {
      <div className="flex items-center justify-between border-b border-border-card pb-5">
       <div>
        <h1 className="text-2xl font-black text-foreground tracking-tight">System Analytics</h1>
-       <p className="text-xs text-foreground/60 mt-1">
+       <p className="text-xs text-foreground opacity-80 mt-1">
         {activeProject ? `Metrics dashboard for ${activeProject.name}` : 'Create a project to load parameters.'}
        </p>
       </div>
       <div className="flex items-center gap-3">
        {activeProject && (
-        <div className="px-3.5 py-1.5 rounded-lg bg-card border border-border-card text-xs text-foreground/75 font-mono tracking-wider">
+        <div className="px-3.5 py-1.5 rounded-lg bg-card border border-border-card text-xs text-foreground opacity-85 font-mono tracking-wider">
          ACTIVE STACK: {activeProject.tech_stack || 'Standard QA Framework'}
         </div>
        )}
@@ -260,7 +266,7 @@ export default function Dashboard() {
          return (
           <div key={card.name} className="bg-card border border-border-card p-5 rounded-2xl flex items-center justify-between transition-all duration-300 hover:-translate-y-0.5 hover:border-foreground/35 hover:shadow-xl group">
            <div className="flex flex-col gap-2">
-            <span className="text-[9px] text-foreground/50 font-bold uppercase tracking-widest">{card.name}</span>
+            <span className="text-[9px] text-foreground opacity-70 font-bold uppercase tracking-widest">{card.name}</span>
             <span className="text-2xl font-black text-foreground tracking-tight leading-none">{card.value}</span>
            </div>
            <div className="p-2.5 rounded-xl bg-background border border-border-card group-hover:border-foreground/20 transition duration-300">
@@ -281,7 +287,7 @@ export default function Dashboard() {
          <div className="bg-card border border-border-card p-5 rounded-2xl flex flex-col gap-5 hover:border-foreground/20 transition duration-300 shadow-md">
           <div>
            <h3 className="text-sm font-bold text-foreground tracking-tight">Test Execution Summary</h3>
-           <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">Pass / Fail / Blocked metrics across modules.</p>
+           <p className="text-[10px] text-foreground opacity-70 mt-0.5 leading-relaxed">Pass / Fail / Blocked metrics across modules.</p>
           </div>
           <div className="h-64 w-full">
            {moduleChartData.length > 0 ? (
@@ -294,13 +300,13 @@ export default function Dashboard() {
                contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '12px', color: tooltipTextColor }}
                labelStyle={{ color: tooltipTextColor, fontWeight: 'bold' }}
               />
-              <Legend verticalAlign="top" height={36} iconType="circle" formatter={(value) => <span className="text-[10px] font-bold text-foreground/60">{value}</span>} />
+              <Legend verticalAlign="top" height={36} iconType="circle" formatter={(value) => <span className="text-[10px] font-bold text-foreground opacity-80">{value}</span>} />
               <Bar dataKey="Test Cases" fill={barColor} radius={[4, 4, 0, 0]} />
               <Bar dataKey="Bugs" fill="#f43f5e" radius={[4, 4, 0, 0]} />
              </BarChart>
             </ResponsiveContainer>
            ) : (
-            <div className="h-full flex items-center justify-center text-foreground/50 text-xs font-mono">
+            <div className="h-full flex items-center justify-center text-foreground opacity-70 text-xs font-mono">
              No data to load. Go to Requirement Analysis.
             </div>
            )}
@@ -313,7 +319,7 @@ export default function Dashboard() {
          <div className="bg-card border border-border-card p-5 rounded-2xl flex flex-col gap-5 hover:border-foreground/20 transition duration-300 shadow-md">
           <div>
            <h3 className="text-sm font-bold text-foreground tracking-tight">Bug Severity Summary</h3>
-           <p className="text-[10px] text-foreground/50 mt-0.5 leading-relaxed">Proportions of suggested failure vectors.</p>
+           <p className="text-[10px] text-foreground opacity-70 mt-0.5 leading-relaxed">Proportions of suggested failure vectors.</p>
           </div>
           <div className="h-64 w-full flex items-center justify-center">
            {bugChartData.length > 0 ? (
@@ -342,13 +348,13 @@ export default function Dashboard() {
                verticalAlign="bottom" 
                height={36} 
                iconType="circle" 
-               formatter={(value) => <span className="text-[10px] font-bold text-foreground/60">{value}</span>}
+               formatter={(value) => <span className="text-[10px] font-bold text-foreground opacity-80">{value}</span>}
               />
              </PieChart>
             </ResponsiveContainer>
            ) : (
-            <div className="h-full flex flex-col items-center justify-center text-foreground/50 text-xs font-mono gap-2.5 text-center">
-             <ShieldAlert className="w-8 h-8 text-foreground/35" />
+            <div className="h-full flex flex-col items-center justify-center text-foreground opacity-70 text-xs font-mono gap-2.5 text-center">
+             <ShieldAlert className="w-8 h-8 text-foreground opacity-40" />
              <span>No bugs generated. <br/> Upload a requirement.</span>
             </div>
            )}
@@ -359,10 +365,10 @@ export default function Dashboard() {
       </div>
      ) : (
       <div className="flex-1 bg-card border border-border-card border-dashed rounded-2xl flex flex-col items-center justify-center p-12 text-center gap-4">
-       <Layers className="w-12 h-12 text-foreground/35 animate-pulse" />
+       <Layers className="w-12 h-12 text-foreground opacity-40 animate-pulse" />
        <div>
         <h2 className="text-base font-bold text-foreground tracking-tight">No Active Projects</h2>
-        <p className="text-xs text-foreground/50 max-w-sm mt-1 leading-relaxed">
+        <p className="text-xs text-foreground opacity-70 max-w-sm mt-1 leading-relaxed">
          Please select an existing project from the sidebar dropdown, or create a new one to initialize the QA parameters.
         </p>
        </div>
@@ -382,17 +388,17 @@ export default function Dashboard() {
                </div>
                <div>
                  <h2 className="text-sm font-black text-foreground">Configure Dashboard Widgets</h2>
-                 <p className="text-[10px] text-foreground/50 mt-0.5">Toggle active components on System Analytics page</p>
+                 <p className="text-[10px] text-foreground opacity-70 mt-0.5">Toggle active components on System Analytics page</p>
                </div>
              </div>
-             <button onClick={() => setShowWidgetModal(false)} className="p-2 text-foreground/50 hover:text-foreground rounded-full transition cursor-pointer"><X className="w-5 h-5" /></button>
+             <button onClick={() => setShowWidgetModal(false)} className="p-2 text-foreground opacity-70 hover:text-foreground rounded-full transition cursor-pointer"><X className="w-5 h-5" /></button>
            </div>
            <div className="p-6 flex flex-col gap-6 max-h-[70vh] overflow-y-auto scrollbar-thin">
              
              <div className="flex flex-col gap-6">
                {['KPI Cards', 'Charts'].map(category => (
                  <div key={category} className="flex flex-col gap-3">
-                   <h3 className="text-[9px] font-bold text-foreground/50 uppercase tracking-widest border-b border-border-card pb-2">{category}</h3>
+                   <h3 className="text-[9px] font-bold text-foreground opacity-70 uppercase tracking-widest border-b border-border-card pb-2">{category}</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {WIDGETS_CONFIG.filter(w => w.category === category).map(w => {
                       const isChecked = visibleWidgets.includes(w.id);
@@ -408,12 +414,12 @@ export default function Dashboard() {
                           }`}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`p-2.5 rounded-lg border shrink-0 transition ${isChecked ? 'bg-foreground border-foreground text-background' : 'bg-background border-border-card text-foreground/50 group-hover:text-foreground/80'}`}>
+                            <div className={`p-2.5 rounded-lg border shrink-0 transition ${isChecked ? 'bg-foreground border-foreground text-background' : 'bg-background border-border-card text-foreground opacity-70 group-hover:text-foreground/80'}`}>
                               <Icon className="w-4 h-4" />
                             </div>
                             <div>
                               <p className={`text-xs font-bold transition ${isChecked ? 'text-foreground' : 'text-foreground/80'}`}>{w.label}</p>
-                              <p className="text-[10px] text-foreground/50 mt-1 leading-relaxed">{w.desc}</p>
+                              <p className="text-[10px] text-foreground opacity-70 mt-1 leading-relaxed">{w.desc}</p>
                             </div>
                           </div>
                           
