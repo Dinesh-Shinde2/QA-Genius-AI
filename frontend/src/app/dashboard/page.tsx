@@ -50,6 +50,7 @@ export default function Dashboard() {
   activeProject, 
   testCases, 
   bugs, 
+  enterpriseBugs,
   coverageMatrix, 
   projects,
   loading,
@@ -57,6 +58,7 @@ export default function Dashboard() {
   testRuns,
   fetchTestRuns,
   fetchTestCases,
+  fetchBugs,
   fetchEnterpriseBugs,
   fetchCoverageMatrix
  } = useAppStore();
@@ -72,10 +74,11 @@ export default function Dashboard() {
    if (activeProject && token) {
      fetchTestRuns(activeProject.id);
      fetchTestCases();
+     fetchBugs(activeProject.id);
      fetchEnterpriseBugs(activeProject.id);
      fetchCoverageMatrix(activeProject.id);
    }
- }, [activeProject, token, fetchTestRuns, fetchTestCases, fetchEnterpriseBugs, fetchCoverageMatrix]);
+ }, [activeProject, token, fetchTestRuns, fetchTestCases, fetchBugs, fetchEnterpriseBugs, fetchCoverageMatrix]);
 
  useEffect(() => {
   setMounted(true);
@@ -122,7 +125,7 @@ export default function Dashboard() {
     moduleDataMap[tc.module] = (moduleDataMap[tc.module] || 0) + 1;
   });
   
-  bugs.forEach(bug => {
+  enterpriseBugs.forEach(bug => {
     if (bug.module) {
       moduleBugMap[bug.module] = (moduleBugMap[bug.module] || 0) + 1;
     }
@@ -143,10 +146,10 @@ export default function Dashboard() {
 
  // Chart 2: Bug Severity distribution
  const severityCount: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
- bugs.forEach(bug => {
-  const sev = bug.severity?.toUpperCase() || 'HIGH';
-  severityCount[sev] = (severityCount[sev] || 0) + 1;
- });
+  enterpriseBugs.forEach(bug => {
+   const sev = bug.severity?.toUpperCase() || 'HIGH';
+   severityCount[sev] = (severityCount[sev] || 0) + 1;
+  });
 
  // If no bugs, add mock structure for visual representation
  const bugChartData = Object.keys(severityCount).map(k => ({
@@ -212,9 +215,9 @@ export default function Dashboard() {
 
   const statCards = [
    { id: 'totalProjects', name: 'Total Projects', value: projects.length, icon: FolderRoot, color: 'text-foreground' },
-   { id: 'openBugs', name: 'Open Bugs', value: bugs.filter(b => b.status === 'OPEN').length, icon: FileSpreadsheet, color: 'text-foreground' },
+   { id: 'openBugs', name: 'Open Bugs', value: enterpriseBugs.filter(b => b.status !== 'RESOLVED' && b.status !== 'CLOSED').length, icon: FileSpreadsheet, color: 'text-foreground' },
    { id: 'testCases', name: 'Test Cases', value: testCases.length, icon: BadgeCheck, color: 'text-foreground' },
-   { id: 'bugsIdentified', name: 'Bugs Identified', value: bugs.length, icon: Bug, color: 'text-foreground' },
+   { id: 'bugsIdentified', name: 'Bugs Identified', value: enterpriseBugs.length, icon: Bug, color: 'text-foreground' },
    { id: 'testExecution', name: 'Test Execution Success', value: executionSuccessRate, icon: TrendingUp, color: 'text-foreground' },
   ];
 
